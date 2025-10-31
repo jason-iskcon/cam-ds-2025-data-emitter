@@ -1,6 +1,7 @@
 import argparse
 import random
-from emitter._streaming import stream_events
+
+from emitter._streaming import add_streaming_args, stream_events
 from emitter.contracts import TransactionEvent
 
 MCC = ["grocery", "electronics", "fuel", "luxury", "online"]
@@ -44,5 +45,15 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--rate", type=float, default=DEFAULT_RATE, help="Events per second")
     parser.add_argument("--max", type=int, default=DEFAULT_MAX_EVENTS, help="Stop after N events")
+    add_streaming_args(parser)
+    
     args = parser.parse_args()
-    stream_events(synth_event, rate_per_sec=args.rate, max_events=args.max)
+    stream_events(
+        synth_event,
+        rate_per_sec=args.rate,
+        max_events=args.max,
+        jitter=args.jitter,
+        burst_probability=args.burst_prob,
+        burst_multiplier=args.burst_mult,
+        burst_duration_events=args.burst_duration,
+    )

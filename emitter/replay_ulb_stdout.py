@@ -1,6 +1,8 @@
 import argparse
+
 import pandas as pd
-from emitter._streaming import stream_events
+
+from emitter._streaming import DEFAULT_BURST_DURATION, DEFAULT_BURST_MULTIPLIER, add_streaming_args, stream_events
 from emitter.contracts import TransactionEvent
 
 DEFAULT_CSV_PATH = "data/ulb/creditcard.csv"
@@ -51,11 +53,37 @@ class ULBEventGenerator:
         )
 
 
-def replay(csv_path: str, rate: float = DEFAULT_RATE, loop: bool = False):
-    """Replay ULB credit card dataset events to stdout at specified rate."""
+def replay(
+    csv_path: str,
+    rate: float = DEFAULT_RATE,
+    loop: bool = False,
+    jitter: float = 0.0,
+    burst_probability: float = 0.0,
+    burst_multiplier: float = DEFAULT_BURST_MULTIPLIER,
+    burst_duration_events: int = DEFAULT_BURST_DURATION,
+):
+    """Replay ULB credit card dataset events to stdout at specified rate.
+    
+    Args:
+        csv_path: Path to CSV file to replay
+        rate: Events per second
+        loop: If True, loop indefinitely; otherwise replay once
+        jitter: Jitter fraction (0.0-1.0) for timing variance
+        burst_probability: Probability of burst per event (0.0-1.0)
+        burst_multiplier: Rate multiplier during bursts
+        burst_duration_events: Number of events in a burst
+    """
     generator = ULBEventGenerator(csv_path)
     max_events = None if loop else (len(generator.df) if generator.df is not None else None)
-    stream_events(generator, rate_per_sec=rate, max_events=max_events)
+    stream_events(
+        generator,
+        rate_per_sec=rate,
+        max_events=max_events,
+        jitter=jitter,
+        burst_probability=burst_probability,
+        burst_multiplier=burst_multiplier,
+        burst_duration_events=burst_duration_events,
+    )
 
 
 if __name__ == "__main__":
@@ -63,5 +91,15 @@ if __name__ == "__main__":
     parser.add_argument("--path", default=DEFAULT_CSV_PATH, help="Path to CSV file")
     parser.add_argument("--rate", type=float, default=DEFAULT_RATE, help="Events per second")
     parser.add_argument("--loop", action="store_true", help="Loop replay indefinitely")
+    add_streaming_args(parser)
+    
     args = parser.parse_args()
-    replay(args.path, rate=args.rate, loop=args.loop)
+    replay(
+        args.path,
+        rate=args.rate,
+        loop=args.loop,
+        jitter=args.jitter,
+        burst_probability=args.burst_prob,
+        burst_multiplier=args.burst_mult,
+        burst_duration_events=args.burst_duration,
+    )
