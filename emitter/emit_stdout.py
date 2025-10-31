@@ -1,6 +1,5 @@
 import argparse
 import random
-
 from emitter._streaming import stream_events
 from emitter.contracts import TransactionEvent
 

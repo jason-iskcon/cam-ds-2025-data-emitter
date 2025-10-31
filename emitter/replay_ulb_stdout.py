@@ -1,7 +1,5 @@
 import argparse
-
 import pandas as pd
-
 from emitter._streaming import stream_events
 from emitter.contracts import TransactionEvent
 

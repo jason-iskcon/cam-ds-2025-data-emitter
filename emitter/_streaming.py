@@ -2,7 +2,6 @@
 import json
 import time
 from typing import Callable
-
 from emitter.contracts import TransactionEvent
 
 
