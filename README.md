@@ -50,12 +50,14 @@ make replay-ulb
 - Replays the ULB credit card fraud dataset at 10 events per second with looping enabled
 - Equivalent to: `python -m emitter.replay_ulb_stdout --path data/ulb/creditcard.csv --rate 10 --loop`
 - Requires the dataset to be downloaded first (see Quickstart)
+- **Preserves all ML features**: All columns from the dataset (V1-V28 PCA features, Time, etc.) are included in the `features` field for ML model compatibility
 - With `--loop`, the dataset cycles indefinitely; without it, replays once through the entire dataset
 
 **`make replay-ulb-realistic`**
 - Replays the ULB dataset at 10 events per second with realistic timing and looping
 - Equivalent to: `python -m emitter.replay_ulb_stdout --path data/ulb/creditcard.csv --rate 10 --loop --jitter 0.2 --burst-prob 0.04`
 - **Recommended for realistic ULB testing** - includes jitter and bursts for more authentic streaming behavior
+- All ML features are preserved in the `features` field
 
 ### Basic Script Parameters
 

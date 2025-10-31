@@ -33,7 +33,10 @@ class ULBEventGenerator:
         self.df = pd.read_csv(self.csv_path)
     
     def __call__(self, event_num: int, base_ts: int) -> TransactionEvent:
-        """Generate event from CSV row at position event_num % len(df)."""
+        """Generate event from CSV row at position event_num % len(df).
+        
+        Includes all columns from the dataset in the features dict for ML compatibility.
+        """
         if self.df is None or len(self.df) == 0:
             raise ValueError("No data available")
         
@@ -44,6 +47,20 @@ class ULBEventGenerator:
         amount = float(_get_column_value(row, "Amount", "amount", 0.0))
         label = int(_get_column_value(row, "Class", "label", 0))
         
+        # Include all columns from the dataset in features for ML compatibility
+        # This preserves V1-V28 PCA features, Time, and any other columns needed for ML models
+        features = {}
+        exclude_cols = {"CustomerID", "Amount", "amount", "Class", "label"}
+        for col in row.index:
+            if col not in exclude_cols:
+                val = row[col]
+                # Convert numpy types to native Python types for JSON serialization
+                if hasattr(val, 'item'):  # numpy scalar
+                    val = val.item()
+                elif pd.isna(val):
+                    val = None
+                features[col] = val
+        
         return TransactionEvent(
             tx_id=f"ulb_{event_num}",
             customer_id=customer_id,
@@ -51,6 +68,7 @@ class ULBEventGenerator:
             merchant_cat="unknown",
             ts=base_ts + event_num,
             label=label,
+            features=features,
         )
 
 
