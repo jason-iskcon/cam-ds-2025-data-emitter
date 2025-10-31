@@ -21,6 +21,10 @@ make emit
 pip install kaggle
 python scripts/kaggle_fetch.py mlg-ulb/creditcardfraud creditcard.csv data/ulb
 make replay-ulb
+
+# Optional: Start local Kafka (Redpanda) for testing Kafka sinks
+# docker compose up -d
+# python -m emitter.emit_stdout --rate 10 --max 100 --kafka-bootstrap localhost:9092 --kafka-topic transactions
 ```
 
 ## Usage
@@ -79,6 +83,40 @@ make replay-ulb
 ### Event Sinks
 
 The emitter supports pluggable **sinks** to route events to different destinations. By default, events are written to stdout, but you can easily switch to Kafka or implement custom sinks.
+
+#### Local Kafka Setup
+
+For local development and testing, the project includes a Docker Compose file for running Redpanda (a Kafka-compatible broker). This allows you to test Kafka functionality without setting up a full Kafka cluster.
+
+**Prerequisites:**
+- Docker and Docker Compose installed
+- `kafka-python` package: `pip install kafka-python`
+
+**Starting Redpanda:**
+```bash
+# Start Redpanda broker
+docker compose up -d
+
+# Check status
+docker compose ps
+
+# View logs
+docker compose logs -f redpanda
+
+# Stop the broker
+docker compose down
+```
+
+**Using with the emitter:**
+Once running, Redpanda will be available at `localhost:9092`. Topics are automatically created when first used. Example:
+
+```bash
+python -m emitter.emit_stdout --rate 10 --max 100 --kafka-bootstrap localhost:9092 --kafka-topic transactions
+```
+
+**Monitoring:**
+- Redpanda console: `http://localhost:9644` - Web UI for monitoring topics, messages, and broker metrics
+- Port 9092: Kafka-compatible API endpoint
 
 #### Available Sinks
 
