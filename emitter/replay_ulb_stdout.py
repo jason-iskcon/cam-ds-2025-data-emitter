@@ -4,6 +4,7 @@ import pandas as pd
 
 from emitter._streaming import DEFAULT_BURST_DURATION, DEFAULT_BURST_MULTIPLIER, add_streaming_args, stream_events
 from emitter.contracts import TransactionEvent
+from emitter.sinks import KafkaSink, Sink, StdoutSink
 
 DEFAULT_CSV_PATH = "data/ulb/creditcard.csv"
 DEFAULT_RATE = 10.0
@@ -53,21 +54,43 @@ class ULBEventGenerator:
         )
 
 
+def create_sink(args: argparse.Namespace) -> Sink:
+    """Create appropriate sink based on command-line arguments.
+    
+    Args:
+        args: Parsed command-line arguments
+        
+    Returns:
+        Sink instance (StdoutSink or KafkaSink)
+    """
+    if args.kafka_bootstrap:
+        return KafkaSink(
+            bootstrap=args.kafka_bootstrap,
+            topic=args.kafka_topic,
+            acks=args.kafka_acks,
+            linger_ms=args.kafka_linger_ms,
+            batch_size=args.kafka_batch_size,
+        )
+    return StdoutSink()
+
+
 def replay(
     csv_path: str,
     rate: float = DEFAULT_RATE,
     loop: bool = False,
+    sink: Sink | None = None,
     jitter: float = 0.0,
     burst_probability: float = 0.0,
     burst_multiplier: float = DEFAULT_BURST_MULTIPLIER,
     burst_duration_events: int = DEFAULT_BURST_DURATION,
 ):
-    """Replay ULB credit card dataset events to stdout at specified rate.
+    """Replay ULB credit card dataset events to a sink at specified rate.
     
     Args:
         csv_path: Path to CSV file to replay
         rate: Events per second
         loop: If True, loop indefinitely; otherwise replay once
+        sink: Sink to write events to (defaults to StdoutSink if None)
         jitter: Jitter fraction (0.0-1.0) for timing variance
         burst_probability: Probability of burst per event (0.0-1.0)
         burst_multiplier: Rate multiplier during bursts
@@ -78,6 +101,7 @@ def replay(
     stream_events(
         generator,
         rate_per_sec=rate,
+        sink=sink,
         max_events=max_events,
         jitter=jitter,
         burst_probability=burst_probability,
@@ -93,11 +117,21 @@ if __name__ == "__main__":
     parser.add_argument("--loop", action="store_true", help="Loop replay indefinitely")
     add_streaming_args(parser)
     
+    # Sink selection arguments
+    parser.add_argument("--kafka-bootstrap", type=str, help="Kafka broker address (e.g., localhost:9092). If not provided, uses stdout")
+    parser.add_argument("--kafka-topic", type=str, default="transactions", help="Kafka topic name (default: transactions)")
+    parser.add_argument("--kafka-acks", type=str, default="1", help="Kafka acks setting: '0', '1', 'all' (default: '1')")
+    parser.add_argument("--kafka-linger-ms", type=int, default=5, help="Kafka linger_ms (default: 5)")
+    parser.add_argument("--kafka-batch-size", type=int, default=16384, help="Kafka batch_size in bytes (default: 16384)")
+    
     args = parser.parse_args()
+    sink = create_sink(args)
+    
     replay(
         args.path,
         rate=args.rate,
         loop=args.loop,
+        sink=sink,
         jitter=args.jitter,
         burst_probability=args.burst_prob,
         burst_multiplier=args.burst_mult,

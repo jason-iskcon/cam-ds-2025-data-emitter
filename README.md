@@ -30,7 +30,12 @@ make replay-ulb
 **`make emit`**
 - Emits 10 synthetic transaction events at 5 events per second
 - Equivalent to: `python -m emitter.emit_stdout --rate 5 --max 10`
-- Generates synthetic transactions with randomized amounts, merchant categories, and fraud labels
+- Simple example for quick testing - generates synthetic transactions with randomized amounts, merchant categories, and fraud labels
+
+**`make emit-realistic`**
+- Emits 200 synthetic transaction events at 10 events per second with realistic timing
+- Equivalent to: `python -m emitter.emit_stdout --rate 10 --max 200 --jitter 0.2 --burst-prob 0.04`
+- **Recommended for realistic testing** - includes jitter (20% timing variance) and occasional bursts (4% chance) to simulate real-world streaming behavior
 
 **`make emit-fast`**
 - Emits 50 synthetic transaction events at 20 events per second
@@ -43,36 +48,86 @@ make replay-ulb
 - Requires the dataset to be downloaded first (see Quickstart)
 - With `--loop`, the dataset cycles indefinitely; without it, replays once through the entire dataset
 
-### Script Parameters
+**`make replay-ulb-realistic`**
+- Replays the ULB dataset at 10 events per second with realistic timing and looping
+- Equivalent to: `python -m emitter.replay_ulb_stdout --path data/ulb/creditcard.csv --rate 10 --loop --jitter 0.2 --burst-prob 0.04`
+- **Recommended for realistic ULB testing** - includes jitter and bursts for more authentic streaming behavior
+
+### Basic Script Parameters
 
 **`emitter/emit_stdout.py`**
 - `--rate <float>`: Events per second (default: 5.0)
 - `--max <int>`: Maximum number of events to emit before stopping (default: 10)
-- `--jitter <float>`: Jitter fraction (0.0-1.0) for timing variance. Adds Gaussian noise to inter-event intervals for more realistic timing. 0.2 = ±20% timing variation (default: 0.0)
-- `--burst-prob <float>`: Probability of entering a burst per event (0.0-1.0). Bursts temporarily increase emission rate for realistic traffic spikes (default: 0.0)
-- `--burst-mult <float>`: Rate multiplier during bursts. 5.0 means events emit at 5x the base rate during bursts (default: 5.0)
-- `--burst-duration <int>`: Number of events to emit during a burst (default: 10)
 - Examples:
   - `python -m emitter.emit_stdout --rate 10 --max 100`
-  - `python -m emitter.emit_stdout --rate 5 --max 50 --jitter 0.2 --burst-prob 0.05`
+  - `python -m emitter.emit_stdout --rate 5 --max 50`
 
 **`emitter/replay_ulb_stdout.py`**
 - `--path <str>`: Path to CSV file to replay (default: `data/ulb/creditcard.csv`)
 - `--rate <float>`: Events per second (default: 10.0)
 - `--loop`: If set, loops through the dataset indefinitely; otherwise replays once
-- `--jitter <float>`: Jitter fraction (0.0-1.0) for timing variance (default: 0.0)
-- `--burst-prob <float>`: Probability of entering a burst per event (0.0-1.0) (default: 0.0)
-- `--burst-mult <float>`: Rate multiplier during bursts (default: 5.0)
-- `--burst-duration <int>`: Number of events to emit during a burst (default: 10)
 - Examples:
   - `python -m emitter.replay_ulb_stdout --path data/ulb/creditcard.csv --rate 5`
-  - `python -m emitter.replay_ulb_stdout --rate 10 --loop --jitter 0.15 --burst-prob 0.03`
+  - `python -m emitter.replay_ulb_stdout --rate 10 --loop`
 
 **`scripts/kaggle_fetch.py`**
 - `dataset`: Kaggle dataset identifier (e.g., `mlg-ulb/creditcardfraud`)
 - `filename`: Exact filename or pattern to extract from the dataset
 - `outdir`: Output directory where the file will be saved
 - Example: `python scripts/kaggle_fetch.py mlg-ulb/creditcardfraud creditcard.csv data/ulb`
+
+### Event Sinks
+
+The emitter supports pluggable **sinks** to route events to different destinations. By default, events are written to stdout, but you can easily switch to Kafka or implement custom sinks.
+
+#### Available Sinks
+
+**StdoutSink** (default)
+- Writes events as JSON lines to stdout
+- No additional dependencies
+- Example: `python -m emitter.emit_stdout --rate 5 --max 10`
+
+**KafkaSink**
+- Writes events to a Kafka topic
+- Requires `kafka-python` package: `pip install kafka-python`
+- Automatically handles serialization, batching, and connection management
+- Example: `python -m emitter.emit_stdout --rate 10 --max 100 --kafka-bootstrap localhost:9092 --kafka-topic transactions`
+
+#### Custom Sinks
+
+You can implement custom sinks by creating a class with a `write(event: dict[str, Any]) -> None` method. The sink must conform to the `Sink` protocol:
+
+```python
+from emitter.sinks import Sink
+
+class MyCustomSink:
+    def write(self, event: dict[str, Any]) -> None:
+        # Your custom logic here
+        pass
+```
+
+#### Sink Configuration
+
+**Kafka Configuration:**
+- `--kafka-bootstrap`: Broker address (required for Kafka)
+- `--kafka-topic`: Topic name (default: `transactions`)
+- `--kafka-acks`: Acknowledgment mode - `'0'` (no ack), `'1'` (leader), `'all'` (all replicas)
+- `--kafka-linger-ms`: Wait time before sending a batch (default: 5ms)
+- `--kafka-batch-size`: Batch size in bytes (default: 16384)
+
+**Sink Examples:**
+```bash
+# Emit to stdout (default)
+python -m emitter.emit_stdout --rate 5 --max 20
+
+# Emit to Kafka topic
+python -m emitter.emit_stdout --rate 10 --max 100 --kafka-bootstrap localhost:9092 --kafka-topic transactions
+
+# High-throughput Kafka with custom configuration
+python -m emitter.emit_stdout --rate 50 --max 1000 --kafka-bootstrap localhost:9092 --kafka-topic high-volume --kafka-acks all --kafka-batch-size 32768
+```
+
+## Advanced Features
 
 ### Realistic Timing Features
 
@@ -81,6 +136,16 @@ The emitter supports **jitter** and **bursts** to simulate realistic streaming d
 - **Jitter**: Adds timing variance to inter-event intervals using Gaussian noise. This mimics network latency and processing delays found in real systems. Use `--jitter 0.15-0.25` for moderate variance.
 
 - **Bursts**: Randomly triggers periods of faster emission to simulate traffic spikes (e.g., flash sales, peak hours). Use `--burst-prob 0.03-0.05` for occasional bursts (3-5% chance per event). During bursts, events emit at `rate × burst_multiplier` for `burst_duration` events, then return to normal rate.
+
+### Advanced Script Parameters
+
+Both `emitter/emit_stdout.py` and `emitter/replay_ulb_stdout.py` support the following advanced parameters:
+
+**Timing Parameters:**
+- `--jitter <float>`: Jitter fraction (0.0-1.0) for timing variance. Adds Gaussian noise to inter-event intervals for more realistic timing. 0.2 = ±20% timing variation (default: 0.0)
+- `--burst-prob <float>`: Probability of entering a burst per event (0.0-1.0). Bursts temporarily increase emission rate for realistic traffic spikes (default: 0.0)
+- `--burst-mult <float>`: Rate multiplier during bursts. 5.0 means events emit at 5x the base rate during bursts (default: 5.0)
+- `--burst-duration <int>`: Number of events to emit during a burst (default: 10)
 
 ### Testing Examples
 
@@ -138,6 +203,9 @@ python -m emitter.replay_ulb_stdout --rate 10 --loop --jitter 0.2 --burst-prob 0
 
 # High-throughput test with aggressive bursts
 python -m emitter.replay_ulb_stdout --rate 20 --jitter 0.15 --burst-prob 0.05 --burst-mult 8.0 --burst-duration 25
+
+# Replay ULB dataset to Kafka with realistic timing
+python -m emitter.replay_ulb_stdout --rate 10 --loop --kafka-bootstrap localhost:9092 --kafka-topic ulb-fraud --jitter 0.2 --burst-prob 0.04
 ```
 
 **Observing the Effects:**
@@ -145,4 +213,3 @@ python -m emitter.replay_ulb_stdout --rate 20 --jitter 0.15 --burst-prob 0.05 --
 - Watch for bursts: You'll see rapid-fire events followed by normal rate when bursts occur
 - Compare rates: Try the same command with and without jitter/bursts to see the difference
 - Use with pipes: `python -m emitter.emit_stdout --rate 5 --max 50 --jitter 0.2 | head -20` to see first 20 events
-

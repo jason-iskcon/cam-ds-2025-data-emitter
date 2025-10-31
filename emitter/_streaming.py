@@ -1,11 +1,11 @@
 """Shared utilities for event streaming."""
 import argparse
-import json
 import random
 import time
 from typing import Callable
 
 from emitter.contracts import TransactionEvent
+from emitter.sinks import Sink, StdoutSink
 
 # Default burst configuration constants
 DEFAULT_BURST_MULTIPLIER = 5.0
@@ -20,9 +20,14 @@ def add_streaming_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--burst-duration", type=int, default=DEFAULT_BURST_DURATION, help="Number of events in a burst")
 
 
-def emit_event_json(event: TransactionEvent) -> None:
-    """Emit a transaction event as JSON to stdout."""
-    print(json.dumps(event.model_dump(), ensure_ascii=False))
+def emit_event(event: TransactionEvent, sink: Sink) -> None:
+    """Emit a transaction event to the specified sink.
+    
+    Args:
+        event: TransactionEvent to emit
+        sink: Sink to write the event to
+    """
+    sink.write(event.model_dump())
 
 
 def sleep_with_jitter(seconds: float, jitter: float = 0.0) -> None:
@@ -91,23 +96,28 @@ class BurstController:
 def stream_events(
     event_generator: Callable[[int, int], TransactionEvent],
     rate_per_sec: float,
+    sink: Sink | None = None,
     max_events: int | None = None,
     jitter: float = 0.0,
     burst_probability: float = 0.0,
     burst_multiplier: float = DEFAULT_BURST_MULTIPLIER,
     burst_duration_events: int = DEFAULT_BURST_DURATION,
 ) -> None:
-    """Stream events to stdout at specified rate with optional jitter and bursts.
+    """Stream events to a sink at specified rate with optional jitter and bursts.
     
     Args:
         event_generator: Function that generates events (event_num, base_ts) -> TransactionEvent
         rate_per_sec: Base events per second to emit
+        sink: Sink to write events to (defaults to StdoutSink if None)
         max_events: Maximum number of events (None for unlimited)
         jitter: Jitter fraction (0.0-1.0) for timing variance. 0.2 = ±20% timing variation
         burst_probability: Probability of entering a burst (0.0-1.0). 0.05 = 5% chance per event
         burst_multiplier: Rate multiplier during bursts (e.g., 5.0 = 5x faster)
         burst_duration_events: Number of events to emit during a burst
     """
+    if sink is None:
+        sink = StdoutSink()
+    
     base_ts = int(time.time())
     event_num = 0
     burst_controller = BurstController(
@@ -117,14 +127,21 @@ def stream_events(
         base_rate=rate_per_sec,
     )
     
-    while max_events is None or event_num < max_events:
-        event = event_generator(event_num, base_ts)
-        emit_event_json(event)
-        event_num += 1
-        
-        if max_events is None or event_num < max_events:
-            if burst_controller.should_start_burst():
-                burst_controller.start_burst()
+    try:
+        while max_events is None or event_num < max_events:
+            event = event_generator(event_num, base_ts)
+            emit_event(event, sink)
+            event_num += 1
             
-            interval = burst_controller.tick()
-            sleep_with_jitter(interval, jitter)
+            if max_events is None or event_num < max_events:
+                if burst_controller.should_start_burst():
+                    burst_controller.start_burst()
+                
+                interval = burst_controller.tick()
+                sleep_with_jitter(interval, jitter)
+    finally:
+        # Ensure Kafka producer flushes and closes if it's a KafkaSink
+        if hasattr(sink, 'flush'):
+            sink.flush()
+        if hasattr(sink, 'close'):
+            sink.close()
