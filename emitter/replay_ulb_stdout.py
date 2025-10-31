@@ -1,9 +1,8 @@
 import argparse
-import json
-import time
 
 import pandas as pd
 
+from emitter._streaming import stream_events
 from emitter.contracts import TransactionEvent
 
 DEFAULT_CSV_PATH = "data/ulb/creditcard.csv"
@@ -20,33 +19,45 @@ def _get_column_value(row: pd.Series, primary: str, fallback: str = "", default=
     return default
 
 
+class ULBEventGenerator:
+    """Generator for ULB credit card dataset events."""
+    
+    def __init__(self, csv_path: str):
+        self.csv_path = csv_path
+        self.df: pd.DataFrame | None = None
+        self._load_data()
+    
+    def _load_data(self) -> None:
+        """Load CSV data."""
+        self.df = pd.read_csv(self.csv_path)
+    
+    def __call__(self, event_num: int, base_ts: int) -> TransactionEvent:
+        """Generate event from CSV row at position event_num % len(df)."""
+        if self.df is None or len(self.df) == 0:
+            raise ValueError("No data available")
+        
+        row_idx = event_num % len(self.df)
+        row = self.df.iloc[row_idx]
+        
+        customer_id = _get_column_value(row, "CustomerID", "") or f"c{event_num % CUSTOMER_ID_MODULO}"
+        amount = float(_get_column_value(row, "Amount", "amount", 0.0))
+        label = int(_get_column_value(row, "Class", "label", 0))
+        
+        return TransactionEvent(
+            tx_id=f"ulb_{event_num}",
+            customer_id=customer_id,
+            amount=amount,
+            merchant_cat="unknown",
+            ts=base_ts + event_num,
+            label=label,
+        )
+
+
 def replay(csv_path: str, rate: float = DEFAULT_RATE, loop: bool = False):
     """Replay ULB credit card dataset events to stdout at specified rate."""
-    interval = 1.0 / rate
-    base_ts = int(time.time())
-    event_num = 0
-    
-    while True:
-        df = pd.read_csv(csv_path)
-        for _, row in df.iterrows():
-            customer_id = _get_column_value(row, "CustomerID", "") or f"c{event_num % CUSTOMER_ID_MODULO}"
-            amount = float(_get_column_value(row, "Amount", "amount", 0.0))
-            label = int(_get_column_value(row, "Class", "label", 0))
-            
-            event = TransactionEvent(
-                tx_id=f"ulb_{event_num}",
-                customer_id=customer_id,
-                amount=amount,
-                merchant_cat="unknown",
-                ts=base_ts + event_num,
-                label=label,
-            )
-            print(json.dumps(event.model_dump(), ensure_ascii=False))
-            event_num += 1
-            time.sleep(interval)
-        
-        if not loop:
-            break
+    generator = ULBEventGenerator(csv_path)
+    max_events = None if loop else (len(generator.df) if generator.df is not None else None)
+    stream_events(generator, rate_per_sec=rate, max_events=max_events)
 
 
 if __name__ == "__main__":

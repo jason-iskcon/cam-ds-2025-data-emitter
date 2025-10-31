@@ -1,8 +1,7 @@
 import argparse
-import json
 import random
-import time
 
+from emitter._streaming import stream_events
 from emitter.contracts import TransactionEvent
 
 MCC = ["grocery", "electronics", "fuel", "luxury", "online"]
@@ -11,9 +10,11 @@ NIGHT_HOURS = {*range(6), *range(23, 24)}
 HIGH_VALUE_CATEGORIES = {"luxury", "online"}
 LABEL_THRESHOLD_AMOUNT = 300
 LABEL_PROBABILITY = 0.4
+DEFAULT_RATE = 5.0
+DEFAULT_MAX_EVENTS = 10
 
 
-def synth_event(event_num: int, base_ts: int) -> dict:
+def synth_event(event_num: int, base_ts: int) -> TransactionEvent:
     """Generate a synthetic transaction event."""
     customer_id = f"c{random.randint(1, 5000)}"
     merchant_cat = random.choices(MCC, weights=MCC_WEIGHTS)[0]
@@ -30,7 +31,7 @@ def synth_event(event_num: int, base_ts: int) -> dict:
         and random.random() < LABEL_PROBABILITY
     )
     
-    event = TransactionEvent(
+    return TransactionEvent(
         tx_id=f"tx_{event_num}",
         customer_id=customer_id,
         amount=amount,
@@ -38,27 +39,11 @@ def synth_event(event_num: int, base_ts: int) -> dict:
         ts=event_ts,
         label=int(is_suspicious),
     )
-    return event.model_dump()
-
-
-def stream_stdout(rate_per_sec: float = 5.0, max_events: int | None = None):
-    """Stream synthetic events to stdout at specified rate."""
-    interval = 1.0 / rate_per_sec
-    base_ts = int(time.time())
-    event_num = 0
-    
-    while max_events is None or event_num < max_events:
-        event = synth_event(event_num, base_ts)
-        print(json.dumps(event, ensure_ascii=False))
-        event_num += 1
-        
-        if max_events is None or event_num < max_events:
-            time.sleep(interval)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--rate", type=float, default=5.0, help="Events per second")
-    parser.add_argument("--max", type=int, default=10, help="Stop after N events")
+    parser.add_argument("--rate", type=float, default=DEFAULT_RATE, help="Events per second")
+    parser.add_argument("--max", type=int, default=DEFAULT_MAX_EVENTS, help="Stop after N events")
     args = parser.parse_args()
-    stream_stdout(rate_per_sec=args.rate, max_events=args.max)
+    stream_events(synth_event, rate_per_sec=args.rate, max_events=args.max)
