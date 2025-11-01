@@ -12,12 +12,11 @@ WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends tzdata ca-certificates && rm -rf /var/lib/apt/lists/*
 
-COPY --chown=appuser:appuser requirements.txt /app/requirements.txt
+COPY requirements.txt /app/requirements.txt
 RUN pip install --upgrade pip && pip install -r requirements.txt
 
-COPY --chown=appuser:appuser emitter /app/emitter
-COPY --chown=appuser:appuser Makefile /app/Makefile
-COPY --chown=appuser:appuser README.md /app/README.md
+COPY emitter/ /app/emitter/
+RUN chown -R appuser:appuser /app
 
 USER appuser
 

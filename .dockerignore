@@ -1,0 +1,38 @@
+# Python cache - explicit patterns for Windows
+__pycache__
+**/__pycache__
+**/__pycache__/**
+*.pyc
+*.pyo
+*.pyd
+*.py[cod]
+*$py.class
+
+# Development files
+.git/
+.gitignore
+*.md
+Makefile
+Dockerfile
+.dockerignore
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Other
+.DS_Store
+*.log
+
