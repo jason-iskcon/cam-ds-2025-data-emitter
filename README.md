@@ -24,7 +24,7 @@ make replay-ulb
 
 # Optional: Start local Kafka (Redpanda) for testing Kafka sinks
 # docker compose up -d
-# python -m emitter.emit_stdout --rate 10 --max 100 --kafka-bootstrap localhost:9092 --kafka-topic transactions
+# python -m emitter.emit_stdout --rate 10 --max 100 --kafka-bootstrap localhost:19092 --kafka-topic transactions
 ```
 
 ## Usage
@@ -86,13 +86,13 @@ make replay-ulb
 
 The emitter supports pluggable **sinks** to route events to different destinations. By default, events are written to stdout, but you can easily switch to Kafka or implement custom sinks.
 
-#### Local Kafka Setup
+#### Local Kafka Setup with Redpanda
 
 For local development and testing, the project includes a Docker Compose file for running Redpanda (a Kafka-compatible broker). This allows you to test Kafka functionality without setting up a full Kafka cluster.
 
 **Prerequisites:**
 - Docker and Docker Compose installed
-- `kafka-python` package: `pip install kafka-python`
+- `confluent-kafka` package (installed via `requirements.txt`)
 
 **Starting Redpanda:**
 ```bash
@@ -109,16 +109,100 @@ docker compose logs -f redpanda
 docker compose down
 ```
 
-**Using with the emitter:**
-Once running, Redpanda will be available at `localhost:9092`. Topics are automatically created when first used. Example:
+**Network Configuration:**
+Redpanda is configured with dual listeners for proper Docker networking:
+- **Internal network** (containers): `redpanda:9092` - Use this from within Docker containers
+- **External (host)**: `localhost:19092` - Use this from your host machine
 
+**Using with the emitter:**
+
+**From host machine (local Python):**
 ```bash
-python -m emitter.emit_stdout --rate 10 --max 100 --kafka-bootstrap localhost:9092 --kafka-topic transactions
+python -m emitter.emit_stdout --rate 10 --max 100 --kafka-bootstrap localhost:19092 --kafka-topic transactions
+```
+
+**From Docker container:**
+```bash
+# Emit synthetic events (no volume mount needed)
+docker run --rm --network cam-ds-2025-data-emitter_redpanda-net \
+  cam-ds-2025-data-emitter:dev \
+  python -m emitter.emit_stdout --rate 10 --max 100 \
+  --kafka-bootstrap redpanda:9092 --kafka-topic transactions
+
+# Replay CSV files (volume mount required for data access)
+docker run --rm --network cam-ds-2025-data-emitter_redpanda-net \
+  -v C:/Workspace/cam-ds-2025-data-emitter/data:/app/data \
+  cam-ds-2025-data-emitter:dev \
+  python -m emitter.replay_ulb_stdout --rate 10 --loop \
+  --kafka-bootstrap redpanda:9092 --kafka-topic transactions
+```
+
+**Note on Volume Mounts:**
+- The `-v` flag mounts your local `data/` directory into the container at `/app/data`
+- **Required** when using `replay_ulb_stdout.py` to access CSV files
+- **Not needed** when using `emit_stdout.py` (generates synthetic data)
+- Windows path format: `C:/Workspace/cam-ds-2025-data-emitter/data:/app/data`
+- Linux/Mac path format: `/path/to/project/data:/app/data`
+
+**Verifying Messages are Received:**
+
+Check that messages are being written to the topic:
+```bash
+# View topic details and offsets
+docker exec cam-ds-2025-data-emitter-redpanda-1 rpk topic describe transactions -p
+
+# Consume messages directly
+docker exec cam-ds-2025-data-emitter-redpanda-1 rpk topic consume transactions -n 5 --format '%v\n'
+
+# Check high-watermark (proves messages were written)
+docker exec cam-ds-2025-data-emitter-redpanda-1 rpk topic describe transactions -p | grep HIGH-WATERMARK
 ```
 
 **Monitoring:**
-- Redpanda console: `http://localhost:9644` - Web UI for monitoring topics, messages, and broker metrics
-- Port 9092: Kafka-compatible API endpoint
+- Redpanda admin console: `http://localhost:9644` - Web UI for monitoring topics, messages, and broker metrics
+- Port 19092: External Kafka-compatible API endpoint (from host)
+- Port 9092: Internal Kafka API endpoint (from containers)
+
+**Troubleshooting:**
+
+If messages aren't being received, verify step-by-step:
+
+1. **Check Redpanda is running:**
+   ```bash
+   docker compose ps
+   docker compose logs redpanda
+   ```
+
+2. **Verify network connectivity (from container):**
+   ```bash
+   docker run --rm --network cam-ds-2025-data-emitter_redpanda-net \
+     cam-ds-2025-data-emitter:dev \
+     python -c "import socket; s = socket.socket(); s.connect(('redpanda', 9092)); print('Connected'); s.close()"
+   ```
+
+3. **Test topic produce/consume directly:**
+   ```bash
+   # Produce test message
+   docker exec cam-ds-2025-data-emitter-redpanda-1 \
+     bash -c "echo 'test' | rpk topic produce transactions"
+   
+   # Consume to verify
+   docker exec cam-ds-2025-data-emitter-redpanda-1 \
+     rpk topic consume transactions -n 1
+   ```
+
+4. **Check topic offsets (proves messages were written):**
+   ```bash
+   docker exec cam-ds-2025-data-emitter-redpanda-1 \
+     rpk topic describe transactions -p
+   ```
+   Look for `HIGH-WATERMARK` - this shows how many messages have been written.
+
+5. **Common issues:**
+   - **Using wrong port**: Host machine should use `localhost:19092`, containers should use `redpanda:9092`
+   - **Network not connected**: Docker containers must use `--network cam-ds-2025-data-emitter_redpanda-net`
+   - **Topic doesn't exist**: Topics are auto-created, but verify with `rpk topic list`
+   - **No messages consumed**: Use `--offset start` to read from beginning, or check if you're consuming from the latest offset
 
 #### Available Sinks
 
@@ -128,10 +212,11 @@ python -m emitter.emit_stdout --rate 10 --max 100 --kafka-bootstrap localhost:90
 - Example: `python -m emitter.emit_stdout --rate 5 --max 10`
 
 **KafkaSink**
-- Writes events to a Kafka topic
-- Requires `kafka-python` package: `pip install kafka-python`
+- Writes events to a Kafka topic using `confluent-kafka` (production-grade client)
+- Requires `confluent-kafka` package (installed via `requirements.txt`)
 - Automatically handles serialization, batching, and connection management
-- Example: `python -m emitter.emit_stdout --rate 10 --max 100 --kafka-bootstrap localhost:9092 --kafka-topic transactions`
+- Example (from host): `python -m emitter.emit_stdout --rate 10 --max 100 --kafka-bootstrap localhost:19092 --kafka-topic transactions`
+- Example (from Docker): Use `redpanda:9092` and connect container to `cam-ds-2025-data-emitter_redpanda-net` network
 
 #### Custom Sinks
 
@@ -160,11 +245,26 @@ class MyCustomSink:
 # Emit to stdout (default)
 python -m emitter.emit_stdout --rate 5 --max 20
 
-# Emit to Kafka topic
-python -m emitter.emit_stdout --rate 10 --max 100 --kafka-bootstrap localhost:9092 --kafka-topic transactions
+# Emit to Kafka topic (from host machine)
+python -m emitter.emit_stdout --rate 10 --max 100 --kafka-bootstrap localhost:19092 --kafka-topic transactions
+
+# Emit to Kafka from Docker container
+docker run --rm --network cam-ds-2025-data-emitter_redpanda-net \
+  cam-ds-2025-data-emitter:dev \
+  python -m emitter.emit_stdout --rate 10 --max 100 \
+  --kafka-bootstrap redpanda:9092 --kafka-topic transactions
 
 # High-throughput Kafka with custom configuration
-python -m emitter.emit_stdout --rate 50 --max 1000 --kafka-bootstrap localhost:9092 --kafka-topic high-volume --kafka-acks all --kafka-batch-size 32768
+python -m emitter.emit_stdout --rate 50 --max 1000 \
+  --kafka-bootstrap localhost:19092 --kafka-topic high-volume \
+  --kafka-acks all --kafka-batch-size 32768
+
+# Replay ULB dataset to Kafka (note: -v mounts data directory)
+docker run --rm --network cam-ds-2025-data-emitter_redpanda-net \
+  -v C:/Workspace/cam-ds-2025-data-emitter/data:/app/data \
+  cam-ds-2025-data-emitter:dev \
+  python -m emitter.replay_ulb_stdout --rate 10 --loop \
+  --kafka-bootstrap redpanda:9092 --kafka-topic transactions
 ```
 
 ## Advanced Features
@@ -244,8 +344,16 @@ python -m emitter.replay_ulb_stdout --rate 10 --loop --jitter 0.2 --burst-prob 0
 # High-throughput test with aggressive bursts
 python -m emitter.replay_ulb_stdout --rate 20 --jitter 0.15 --burst-prob 0.05 --burst-mult 8.0 --burst-duration 25
 
-# Replay ULB dataset to Kafka with realistic timing
-python -m emitter.replay_ulb_stdout --rate 10 --loop --kafka-bootstrap localhost:9092 --kafka-topic ulb-fraud --jitter 0.2 --burst-prob 0.04
+# Replay ULB dataset to Kafka with realistic timing (from host)
+python -m emitter.replay_ulb_stdout --rate 10 --loop --kafka-bootstrap localhost:19092 --kafka-topic ulb-fraud --jitter 0.2 --burst-prob 0.04
+
+# Replay ULB dataset to Kafka from Docker
+docker run --rm --network cam-ds-2025-data-emitter_redpanda-net \
+  -v C:/Workspace/cam-ds-2025-data-emitter/data:/app/data \
+  cam-ds-2025-data-emitter:dev \
+  python -m emitter.replay_ulb_stdout --rate 10 --loop \
+  --kafka-bootstrap redpanda:9092 --kafka-topic ulb-fraud \
+  --jitter 0.2 --burst-prob 0.04
 ```
 
 **Observing the Effects:**
