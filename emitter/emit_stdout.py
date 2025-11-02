@@ -11,6 +11,37 @@ DEFAULT_MAX_EVENTS = 10
 DEFAULT_FRAUD_CONFIG = FraudConfig()
 
 
+class FraudDetector:
+    """Detects suspicious transactions based on fraud detection rules."""
+    
+    def __init__(self, config: FraudConfig = DEFAULT_FRAUD_CONFIG):
+        """Initialize fraud detector with configuration.
+        
+        Args:
+            config: Fraud detection configuration
+        """
+        self.config = config
+    
+    def is_suspicious(self, amount: float, merchant_cat: str, hour: int, rand_val: float) -> bool:
+        """Check if transaction is suspicious based on fraud rules.
+        
+        Args:
+            amount: Transaction amount
+            merchant_cat: Merchant category
+            hour: Hour of day (0-23)
+            rand_val: Random value (0.0-1.0) for probability check
+            
+        Returns:
+            True if transaction is suspicious, False otherwise
+        """
+        return (
+            amount > self.config.threshold_amount
+            and merchant_cat in self.config.high_value_categories
+            and hour in self.config.night_hours
+            and rand_val < self.config.probability
+        )
+
+
 def synth_event(
     event_num: int,
     base_ts: int,
@@ -32,14 +63,9 @@ def synth_event(
     
     event_ts = base_ts + event_num
     hour = (event_ts // 3600) % 24
-    is_night = hour in fraud_config.night_hours
     
-    is_suspicious = (
-        amount > fraud_config.threshold_amount
-        and merchant_cat in fraud_config.high_value_categories
-        and is_night
-        and random.random() < fraud_config.probability
-    )
+    detector = FraudDetector(fraud_config)
+    is_suspicious = detector.is_suspicious(amount, merchant_cat, hour, random.random())
     
     return TransactionEvent(
         tx_id=f"tx_{event_num}",
