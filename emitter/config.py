@@ -1,5 +1,5 @@
 """Configuration classes for emitter modules."""
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass
@@ -32,4 +32,24 @@ class KafkaConfig:
     acks: str | None = "1"
     linger_ms: int = 5
     batch_size: int = 16384
+
+
+@dataclass
+class FraudConfig:
+    """Configuration for synthetic fraud detection logic.
+    
+    Attributes:
+        mcc: List of merchant category codes
+        mcc_weights: Weights for selecting merchant categories
+        high_value_categories: Set of categories considered high-value for fraud
+        threshold_amount: Minimum amount to consider for fraud (exclusive)
+        probability: Probability threshold for fraud (0.0-1.0)
+        night_hours: Set of hours considered "night hours" (0-5, 23)
+    """
+    mcc: list[str] = field(default_factory=lambda: ["grocery", "electronics", "fuel", "luxury", "online"])
+    mcc_weights: list[int] = field(default_factory=lambda: [35, 20, 15, 5, 25])
+    high_value_categories: set[str] = field(default_factory=lambda: {"luxury", "online"})
+    threshold_amount: int = 300
+    probability: float = 0.4
+    night_hours: set[int] = field(default_factory=lambda: {*range(6), *range(23, 24)})
 

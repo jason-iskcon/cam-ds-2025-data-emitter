@@ -3,33 +3,42 @@ import random
 
 from emitter._streaming import add_streaming_args, stream_events
 from emitter.common import add_kafka_args, create_sink
+from emitter.config import FraudConfig
 from emitter.contracts import TransactionEvent
 
-MCC = ["grocery", "electronics", "fuel", "luxury", "online"]
-MCC_WEIGHTS = [35, 20, 15, 5, 25]
-NIGHT_HOURS = {*range(6), *range(23, 24)}
-HIGH_VALUE_CATEGORIES = {"luxury", "online"}
-LABEL_THRESHOLD_AMOUNT = 300
-LABEL_PROBABILITY = 0.4
 DEFAULT_RATE = 5.0
 DEFAULT_MAX_EVENTS = 10
+DEFAULT_FRAUD_CONFIG = FraudConfig()
 
 
-def synth_event(event_num: int, base_ts: int) -> TransactionEvent:
-    """Generate a synthetic transaction event."""
+def synth_event(
+    event_num: int,
+    base_ts: int,
+    fraud_config: FraudConfig = DEFAULT_FRAUD_CONFIG,
+) -> TransactionEvent:
+    """Generate a synthetic transaction event.
+    
+    Args:
+        event_num: Event number (used for tx_id)
+        base_ts: Base timestamp in seconds
+        fraud_config: Fraud detection configuration (defaults to DEFAULT_FRAUD_CONFIG)
+        
+    Returns:
+        TransactionEvent with synthetic data
+    """
     customer_id = f"c{random.randint(1, 5000)}"
-    merchant_cat = random.choices(MCC, weights=MCC_WEIGHTS)[0]
+    merchant_cat = random.choices(fraud_config.mcc, weights=fraud_config.mcc_weights)[0]
     amount = round(random.lognormvariate(3.2, 0.9), 2)
     
     event_ts = base_ts + event_num
     hour = (event_ts // 3600) % 24
-    is_night = hour in NIGHT_HOURS
+    is_night = hour in fraud_config.night_hours
     
     is_suspicious = (
-        amount > LABEL_THRESHOLD_AMOUNT
-        and merchant_cat in HIGH_VALUE_CATEGORIES
+        amount > fraud_config.threshold_amount
+        and merchant_cat in fraud_config.high_value_categories
         and is_night
-        and random.random() < LABEL_PROBABILITY
+        and random.random() < fraud_config.probability
     )
     
     return TransactionEvent(

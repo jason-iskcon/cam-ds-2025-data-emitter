@@ -2,7 +2,8 @@
 import pytest
 from unittest.mock import patch
 
-from emitter.emit_stdout import synth_event, MCC, HIGH_VALUE_CATEGORIES, LABEL_THRESHOLD_AMOUNT, LABEL_PROBABILITY
+from emitter.config import FraudConfig
+from emitter.emit_stdout import DEFAULT_FRAUD_CONFIG, synth_event
 
 
 class TestSynthEvent:
@@ -35,14 +36,14 @@ class TestSynthEvent:
     
     def test_merchant_category_from_mcc(self):
         """Test merchant category is one of valid MCC values."""
-        for category in MCC:
+        for category in DEFAULT_FRAUD_CONFIG.mcc:
             with patch('emitter.emit_stdout.random.randint', return_value=100):
                 with patch('emitter.emit_stdout.random.choices', return_value=[category]):
                     with patch('emitter.emit_stdout.random.lognormvariate', return_value=50.0):
                         with patch('emitter.emit_stdout.random.random', return_value=0.5):
                             event = synth_event(0, 1000)
                             assert event.merchant_cat == category
-                            assert event.merchant_cat in MCC
+                            assert event.merchant_cat in DEFAULT_FRAUD_CONFIG.mcc
     
     def test_timestamp_calculation(self):
         """Test timestamp is base_ts + event_num."""
