@@ -1,4 +1,5 @@
 import argparse
+from typing import Any
 
 import pandas as pd
 
@@ -19,6 +20,24 @@ def _get_column_value(row: pd.Series, primary: str, fallback: str = "", default=
         if col and col in row:
             return row[col]
     return default
+
+
+def _convert_to_json_safe(val: Any) -> Any:
+    """Convert pandas/numpy value to JSON-serializable Python type.
+    
+    Args:
+        val: Value from pandas Series (may be numpy type, NaN, etc.)
+        
+    Returns:
+        Native Python type (None for NaN, converted numpy scalars)
+    """
+    # Check pd.isna() BEFORE hasattr('item') because numpy NaN has .item() 
+    # but calling .item() on NaN returns Python nan (not None), breaking JSON
+    if pd.isna(val):
+        return None
+    elif hasattr(val, 'item'):  # numpy scalar
+        return val.item()
+    return val
 
 
 class ULBEventGenerator:
@@ -56,15 +75,7 @@ class ULBEventGenerator:
         exclude_cols = {"CustomerID", "Amount", "amount", "Class", "label"}
         for col in row.index:
             if col not in exclude_cols:
-                val = row[col]
-                # Convert numpy types to native Python types for JSON serialization
-                # Check pd.isna() BEFORE hasattr('item') because numpy NaN has .item() 
-                # but calling .item() on NaN returns Python nan (not None), breaking JSON
-                if pd.isna(val):
-                    val = None
-                elif hasattr(val, 'item'):  # numpy scalar
-                    val = val.item()
-                features[col] = val
+                features[col] = _convert_to_json_safe(row[col])
         
         return TransactionEvent(
             tx_id=f"ulb_{event_num}",
