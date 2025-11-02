@@ -1,4 +1,4 @@
-# Cambridge Data Science with Machine Learning and AI 2025
+# Cambridge Data Science with ML and AI 2025/6
 ## Tiny Data Emitter for Cambridge DS mini-projects
 ## Purpose
 
@@ -23,8 +23,8 @@ python scripts/kaggle_fetch.py mlg-ulb/creditcardfraud creditcard.csv data/ulb
 make replay-ulb
 
 # Optional: Start local Kafka (Redpanda) for testing Kafka sinks
-# docker compose up -d
-# python -m emitter.emit_stdout --rate 10 --max 100 --kafka-bootstrap localhost:19092 --kafka-topic transactions
+# make setup
+# make emit-kafka
 ```
 
 ## Usage
@@ -58,6 +58,76 @@ make replay-ulb
 - Equivalent to: `python -m emitter.replay_ulb_stdout --path data/ulb/creditcard.csv --rate 10 --loop --jitter 0.2 --burst-prob 0.04`
 - **Recommended for realistic ULB testing** - includes jitter and bursts for more authentic streaming behavior
 - All ML features are preserved in the `features` field
+
+**Kafka Emit Targets:**
+
+**`make emit-kafka`**
+- Emits 10 synthetic transaction events to Kafka at 5 events per second
+- Requires Redpanda cluster to be running (`make up` or `make setup`)
+- Automatically checks cluster status before emitting
+- Equivalent to: `python -m emitter.emit_stdout --rate 5 --max 10 --kafka-bootstrap localhost:19092 --kafka-topic transactions`
+
+**`make emit-kafka-realistic`**
+- Emits 200 synthetic events to Kafka at 10 events per second with realistic timing
+- Includes jitter and bursts for authentic streaming behavior
+- Equivalent to: `python -m emitter.emit_stdout --rate 10 --max 200 --jitter 0.2 --burst-prob 0.04 --kafka-bootstrap localhost:19092 --kafka-topic transactions`
+
+**`make replay-ulb-kafka`**
+- Replays the ULB dataset to Kafka at 10 events per second with looping
+- Requires Redpanda cluster running and dataset downloaded
+- Equivalent to: `python -m emitter.replay_ulb_stdout --path data/ulb/creditcard.csv --rate 10 --loop --kafka-bootstrap localhost:19092 --kafka-topic transactions`
+
+**`make replay-ulb-kafka-realistic`**
+- Replays the ULB dataset to Kafka with realistic timing and looping
+- Includes jitter and bursts for more authentic behavior
+- Equivalent to: `python -m emitter.replay_ulb_stdout --path data/ulb/creditcard.csv --rate 10 --loop --jitter 0.2 --burst-prob 0.04 --kafka-bootstrap localhost:19092 --kafka-topic transactions`
+
+**Cluster and Topic Management:**
+
+**`make setup`**
+- One-command setup: starts Redpanda cluster, waits for readiness, creates `transactions` topic, and shows cluster info
+- Recommended first step when setting up Kafka testing
+
+**`make up` / `make down`**
+- Start/stop the Redpanda cluster
+- Equivalent to: `docker compose up -d` / `docker compose down`
+
+**`make status`**
+- Check container status
+- Equivalent to: `docker compose ps`
+
+**`make logs`**
+- View cluster logs in follow mode
+- Equivalent to: `docker compose logs -f redpanda`
+
+**`make cluster-info`**
+- Show cluster information and health
+- Equivalent to: `docker compose exec redpanda rpk cluster info`
+
+**`make topics`**
+- List all topics in the cluster
+- Equivalent to: `docker compose exec redpanda rpk topic list`
+
+**`make topic-create`**
+- Create the default `transactions` topic
+- Equivalent to: `docker compose exec redpanda rpk topic create transactions`
+
+**`make topic-describe`**
+- Describe the `transactions` topic with partition details
+- Equivalent to: `docker compose exec redpanda rpk topic describe transactions -p`
+
+**`make topic-delete`**
+- Delete the `transactions` topic
+- Equivalent to: `docker compose exec redpanda rpk topic delete transactions`
+
+**`make topic-consume`**
+- Consume last 10 messages from the `transactions` topic
+- Equivalent to: `docker compose exec redpanda rpk topic consume transactions -n 10 --format '%v\n'`
+
+**`make topic-consume-start`**
+- Consume from the beginning of the `transactions` topic (last 10 messages)
+- Useful for verifying messages were written
+- Equivalent to: `docker compose exec redpanda rpk topic consume transactions --offset start -n 10 --format '%v\n'`
 
 ### Basic Script Parameters
 
@@ -95,6 +165,20 @@ For local development and testing, the project includes a Docker Compose file fo
 - `confluent-kafka` package (installed via `requirements.txt`)
 
 **Starting Redpanda:**
+
+Using Makefile (recommended):
+```bash
+# One-command setup: start cluster, create topic, show info
+make setup
+
+# Or manually:
+make up          # Start Redpanda broker
+make status      # Check status
+make logs        # View logs (follow mode)
+make down        # Stop the broker
+```
+
+Using Docker Compose directly:
 ```bash
 # Start Redpanda broker
 docker compose up -d
@@ -117,6 +201,23 @@ Redpanda is configured with dual listeners for proper Docker networking:
 **Using with the emitter:**
 
 **From host machine (local Python):**
+
+Using Makefile (recommended):
+```bash
+# Quick emit to Kafka (requires cluster running)
+make emit-kafka
+
+# Realistic timing with jitter and bursts
+make emit-kafka-realistic
+
+# Replay ULB dataset to Kafka
+make replay-ulb-kafka
+
+# Replay ULB with realistic timing
+make replay-ulb-kafka-realistic
+```
+
+Using Python directly:
 ```bash
 python -m emitter.emit_stdout --rate 10 --max 100 --kafka-bootstrap localhost:19092 --kafka-topic transactions
 ```
@@ -146,7 +247,22 @@ docker run --rm --network cam-ds-2025-data-emitter_redpanda-net \
 
 **Verifying Messages are Received:**
 
-Check that messages are being written to the topic:
+Using Makefile (recommended):
+```bash
+# List all topics
+make topics
+
+# Describe transactions topic with partition details
+make topic-describe
+
+# Consume last 10 messages
+make topic-consume
+
+# Consume from beginning (verify messages were written)
+make topic-consume-start
+```
+
+Using Docker directly:
 ```bash
 # View topic details and offsets
 docker exec cam-ds-2025-data-emitter-redpanda-1 rpk topic describe transactions -p
@@ -169,6 +285,11 @@ If messages aren't being received, verify step-by-step:
 
 1. **Check Redpanda is running:**
    ```bash
+   # Using Makefile:
+   make status
+   make logs
+   
+   # Or using Docker directly:
    docker compose ps
    docker compose logs redpanda
    ```
@@ -193,6 +314,10 @@ If messages aren't being received, verify step-by-step:
 
 4. **Check topic offsets (proves messages were written):**
    ```bash
+   # Using Makefile:
+   make topic-describe
+   
+   # Or using Docker directly:
    docker exec cam-ds-2025-data-emitter-redpanda-1 \
      rpk topic describe transactions -p
    ```
@@ -201,7 +326,7 @@ If messages aren't being received, verify step-by-step:
 5. **Common issues:**
    - **Using wrong port**: Host machine should use `localhost:19092`, containers should use `redpanda:9092`
    - **Network not connected**: Docker containers must use `--network cam-ds-2025-data-emitter_redpanda-net`
-   - **Topic doesn't exist**: Topics are auto-created, but verify with `rpk topic list`
+   - **Topic doesn't exist**: Topics are auto-created, but verify with `make topics` or `rpk topic list`
    - **No messages consumed**: Use `--offset start` to read from beginning, or check if you're consuming from the latest offset
 
 #### Available Sinks
@@ -241,6 +366,23 @@ class MyCustomSink:
 - `--kafka-batch-size`: Batch size in bytes (default: 16384)
 
 **Sink Examples:**
+
+Using Makefile (recommended for common operations):
+```bash
+# Emit to stdout (default)
+make emit
+make emit-realistic
+
+# Emit to Kafka topic (requires cluster running)
+make emit-kafka
+make emit-kafka-realistic
+
+# Replay ULB dataset to Kafka
+make replay-ulb-kafka
+make replay-ulb-kafka-realistic
+```
+
+Using Python directly (for custom configurations):
 ```bash
 # Emit to stdout (default)
 python -m emitter.emit_stdout --rate 5 --max 20
@@ -345,6 +487,10 @@ python -m emitter.replay_ulb_stdout --rate 10 --loop --jitter 0.2 --burst-prob 0
 python -m emitter.replay_ulb_stdout --rate 20 --jitter 0.15 --burst-prob 0.05 --burst-mult 8.0 --burst-duration 25
 
 # Replay ULB dataset to Kafka with realistic timing (from host)
+# Using Makefile:
+make replay-ulb-kafka-realistic
+
+# Or using Python directly:
 python -m emitter.replay_ulb_stdout --rate 10 --loop --kafka-bootstrap localhost:19092 --kafka-topic ulb-fraud --jitter 0.2 --burst-prob 0.04
 
 # Replay ULB dataset to Kafka from Docker
