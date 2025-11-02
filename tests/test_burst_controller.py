@@ -5,23 +5,28 @@ from unittest.mock import patch
 from emitter._streaming import BurstController
 
 
+@pytest.fixture
+def default_controller():
+    """Fixture for default BurstController instance with standard test parameters."""
+    return BurstController(
+        probability=0.05,
+        multiplier=5.0,
+        duration_events=10,
+        base_rate=10.0,
+    )
+
+
 class TestBurstController:
     """Test BurstController behavior."""
     
-    def test_init(self):
+    def test_init(self, default_controller):
         """Test BurstController initialization."""
-        controller = BurstController(
-            probability=0.05,
-            multiplier=5.0,
-            duration_events=10,
-            base_rate=10.0,
-        )
-        assert controller.probability == 0.05
-        assert controller.multiplier == 5.0
-        assert controller.duration_events == 10
-        assert controller.base_rate == 10.0
-        assert controller.remaining == 0
-        assert controller.burst_rate == 50.0  # 10.0 * 5.0
+        assert default_controller.probability == 0.05
+        assert default_controller.multiplier == 5.0
+        assert default_controller.duration_events == 10
+        assert default_controller.base_rate == 10.0
+        assert default_controller.remaining == 0
+        assert default_controller.burst_rate == 50.0  # 10.0 * 5.0
     
     def test_should_start_burst_disabled(self):
         """Test that burst doesn't start when probability is 0."""
@@ -72,18 +77,12 @@ class TestBurstController:
         with patch('emitter._streaming.random.random', return_value=0.7):
             assert controller2.should_start_burst() is False
     
-    def test_start_burst(self):
+    def test_start_burst(self, default_controller):
         """Test starting a burst."""
-        controller = BurstController(
-            probability=0.05,
-            multiplier=5.0,
-            duration_events=10,
-            base_rate=10.0,
-        )
-        assert controller.remaining == 0
+        assert default_controller.remaining == 0
         
-        controller.start_burst()
-        assert controller.remaining == 10
+        default_controller.start_burst()
+        assert default_controller.remaining == 10
     
     def test_tick_during_burst(self):
         """Test tick during active burst returns burst rate interval."""
@@ -129,19 +128,13 @@ class TestBurstController:
         assert interval == 1.0 / 10.0  # 1.0 / base_rate
         assert controller.remaining == 0
     
-    def test_tick_no_burst(self):
+    def test_tick_no_burst(self, default_controller):
         """Test tick when no burst active returns base rate."""
-        controller = BurstController(
-            probability=0.05,
-            multiplier=5.0,
-            duration_events=10,
-            base_rate=10.0,
-        )
         # Never started burst, remaining = 0
         
-        interval = controller.tick()
+        interval = default_controller.tick()
         assert interval == 1.0 / 10.0  # base rate
-        assert controller.remaining == 0
+        assert default_controller.remaining == 0
     
     def test_burst_lifecycle(self):
         """Test complete burst lifecycle matching actual usage pattern."""

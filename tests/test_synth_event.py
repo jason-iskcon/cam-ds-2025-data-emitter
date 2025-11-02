@@ -6,33 +6,47 @@ from emitter.config import FraudConfig
 from emitter.emit_stdout import DEFAULT_FRAUD_CONFIG, synth_event
 
 
+@pytest.fixture
+def patched_randoms():
+    """Fixture for patching common random functions used in synth_event."""
+    with patch('emitter.emit_stdout.random.randint') as mock_randint, \
+         patch('emitter.emit_stdout.random.choices') as mock_choices, \
+         patch('emitter.emit_stdout.random.lognormvariate') as mock_lognorm, \
+         patch('emitter.emit_stdout.random.random') as mock_random:
+        yield mock_randint, mock_choices, mock_lognorm, mock_random
+
+
 class TestSynthEvent:
     """Test synth_event fraud detection logic."""
     
-    def test_event_structure(self):
+    def test_event_structure(self, patched_randoms):
         """Test basic event structure and fields."""
-        with patch('emitter.emit_stdout.random.randint', return_value=100):
-            with patch('emitter.emit_stdout.random.choices', return_value=['grocery']):
-                with patch('emitter.emit_stdout.random.lognormvariate', return_value=50.0):
-                    with patch('emitter.emit_stdout.random.random', return_value=0.5):
-                        event = synth_event(0, 1000)
-                        
-                        assert event.tx_id == "tx_0"
-                        assert event.customer_id == "c100"
-                        assert event.amount == 50.0
-                        assert event.merchant_cat == "grocery"
-                        assert event.ts == 1000  # base_ts + event_num
-                        assert event.label == 0
+        mock_randint, mock_choices, mock_lognorm, mock_random = patched_randoms
+        mock_randint.return_value = 100
+        mock_choices.return_value = ['grocery']
+        mock_lognorm.return_value = 50.0
+        mock_random.return_value = 0.5
+        
+        event = synth_event(0, 1000)
+        
+        assert event.tx_id == "tx_0"
+        assert event.customer_id == "c100"
+        assert event.amount == 50.0
+        assert event.merchant_cat == "grocery"
+        assert event.ts == 1000  # base_ts + event_num
+        assert event.label == 0
     
-    def test_customer_id_format(self):
+    def test_customer_id_format(self, patched_randoms):
         """Test customer_id format is correct."""
-        with patch('emitter.emit_stdout.random.randint', return_value=42):
-            with patch('emitter.emit_stdout.random.choices', return_value=['electronics']):
-                with patch('emitter.emit_stdout.random.lognormvariate', return_value=50.0):
-                    with patch('emitter.emit_stdout.random.random', return_value=0.5):
-                        event = synth_event(5, 2000)
-                        assert event.customer_id.startswith('c')
-                        assert event.customer_id == "c42"
+        mock_randint, mock_choices, mock_lognorm, mock_random = patched_randoms
+        mock_randint.return_value = 42
+        mock_choices.return_value = ['electronics']
+        mock_lognorm.return_value = 50.0
+        mock_random.return_value = 0.5
+        
+        event = synth_event(5, 2000)
+        assert event.customer_id.startswith('c')
+        assert event.customer_id == "c42"
     
     def test_merchant_category_from_mcc(self):
         """Test merchant category is one of valid MCC values."""

@@ -10,34 +10,43 @@ from emitter.sinks import KafkaSink
 class TestKafkaSink:
     """Test KafkaSink functionality."""
     
+    @pytest.fixture(scope="class")
+    def kafka_mock(self):
+        """Fixture for mocking confluent_kafka module, shared across class."""
+        mock_producer = MagicMock()
+        mock_producer_class = MagicMock(return_value=mock_producer)
+        mock_module = MagicMock()
+        mock_module.Producer = mock_producer_class
+        with patch.dict('sys.modules', {'confluent_kafka': mock_module}):
+            yield mock_producer_class, mock_producer
+    
     def _mock_confluent_kafka(self):
-        """Create mock confluent_kafka module."""
+        """Create mock confluent_kafka module (kept for backward compatibility)."""
         mock_producer = MagicMock()
         mock_producer_class = MagicMock(return_value=mock_producer)
         mock_module = MagicMock()
         mock_module.Producer = mock_producer_class
         return patch.dict('sys.modules', {'confluent_kafka': mock_module}), mock_producer_class, mock_producer
     
-    def test_init_valid_config(self):
+    def test_init_valid_config(self, kafka_mock):
         """Test KafkaSink initialization with valid config."""
-        patcher, mock_producer_class, mock_producer = self._mock_confluent_kafka()
-        with patcher:
-            sink = KafkaSink(
-                bootstrap="localhost:9092",
-                topic="transactions",
-                acks="1",
-                linger_ms=10,
-                batch_size=32768
-            )
-            
-            assert sink.topic == "transactions"
-            assert sink.acks == "1"
-            mock_producer_class.assert_called_once()
-            call_kwargs = mock_producer_class.call_args[0][0]
-            assert call_kwargs["bootstrap.servers"] == "localhost:9092"
-            assert call_kwargs["acks"] == "1"
-            assert call_kwargs["linger.ms"] == 10
-            assert call_kwargs["batch.size"] == 32768
+        mock_producer_class, mock_producer = kafka_mock
+        sink = KafkaSink(
+            bootstrap="localhost:9092",
+            topic="transactions",
+            acks="1",
+            linger_ms=10,
+            batch_size=32768
+        )
+        
+        assert sink.topic == "transactions"
+        assert sink.acks == "1"
+        mock_producer_class.assert_called_once()
+        call_kwargs = mock_producer_class.call_args[0][0]
+        assert call_kwargs["bootstrap.servers"] == "localhost:9092"
+        assert call_kwargs["acks"] == "1"
+        assert call_kwargs["linger.ms"] == 10
+        assert call_kwargs["batch.size"] == 32768
     
     def test_init_default_acks(self):
         """Test KafkaSink initialization with default acks."""
