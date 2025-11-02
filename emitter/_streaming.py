@@ -5,6 +5,7 @@ import signal
 import time
 from typing import Callable
 
+from emitter.config import BurstConfig
 from emitter.contracts import TransactionEvent
 from emitter.sinks import Sink, StdoutSink
 
@@ -141,6 +142,7 @@ def stream_events(
     burst_probability: float = 0.0,
     burst_multiplier: float = DEFAULT_BURST_MULTIPLIER,
     burst_duration_events: int = DEFAULT_BURST_DURATION,
+    burst_config: BurstConfig | None = None,
 ) -> None:
     """Stream events to a sink at specified rate with optional jitter and bursts.
     
@@ -150,21 +152,33 @@ def stream_events(
         sink: Sink to write events to (defaults to StdoutSink if None)
         max_events: Maximum number of events (None for unlimited)
         jitter: Jitter fraction (0.0-1.0) for timing variance. 0.2 = ±20% timing variation
-        burst_probability: Probability of entering a burst (0.0-1.0). 0.05 = 5% chance per event
-        burst_multiplier: Rate multiplier during bursts (e.g., 5.0 = 5x faster)
-        burst_duration_events: Number of events to emit during a burst
+        burst_probability: Probability of entering a burst (0.0-1.0). 0.05 = 5% chance per event.
+                          Ignored if burst_config is provided.
+        burst_multiplier: Rate multiplier during bursts (e.g., 5.0 = 5x faster).
+                         Ignored if burst_config is provided.
+        burst_duration_events: Number of events to emit during a burst.
+                               Ignored if burst_config is provided.
+        burst_config: BurstConfig object. If provided, overrides individual burst parameters.
     """
     if sink is None:
         sink = StdoutSink()
     
     setup_signal_handlers()
     
+    # Use burst_config if provided, otherwise use individual parameters (backward compatibility)
+    if burst_config is None:
+        burst_config = BurstConfig(
+            probability=burst_probability,
+            multiplier=burst_multiplier,
+            duration_events=burst_duration_events,
+        )
+    
     base_ts = int(time.time())
     event_num = 0
     burst_controller = BurstController(
-        probability=burst_probability,
-        multiplier=burst_multiplier,
-        duration_events=burst_duration_events,
+        probability=burst_config.probability,
+        multiplier=burst_config.multiplier,
+        duration_events=burst_config.duration_events,
         base_rate=rate_per_sec,
     )
     

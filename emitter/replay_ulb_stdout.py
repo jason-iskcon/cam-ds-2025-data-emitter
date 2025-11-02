@@ -4,6 +4,7 @@ import pandas as pd
 
 from emitter._streaming import DEFAULT_BURST_DURATION, DEFAULT_BURST_MULTIPLIER, add_streaming_args, stream_events
 from emitter.common import add_kafka_args, create_sink
+from emitter.config import BurstConfig
 from emitter.contracts import TransactionEvent
 from emitter.sinks import Sink
 
@@ -85,6 +86,7 @@ def replay(
     burst_probability: float = 0.0,
     burst_multiplier: float = DEFAULT_BURST_MULTIPLIER,
     burst_duration_events: int = DEFAULT_BURST_DURATION,
+    burst_config: BurstConfig | None = None,
 ):
     """Replay ULB credit card dataset events to a sink at specified rate.
     
@@ -94,9 +96,13 @@ def replay(
         loop: If True, loop indefinitely; otherwise replay once
         sink: Sink to write events to (defaults to StdoutSink if None)
         jitter: Jitter fraction (0.0-1.0) for timing variance
-        burst_probability: Probability of burst per event (0.0-1.0)
-        burst_multiplier: Rate multiplier during bursts
-        burst_duration_events: Number of events in a burst
+        burst_probability: Probability of burst per event (0.0-1.0).
+                          Ignored if burst_config is provided.
+        burst_multiplier: Rate multiplier during bursts.
+                         Ignored if burst_config is provided.
+        burst_duration_events: Number of events in a burst.
+                               Ignored if burst_config is provided.
+        burst_config: BurstConfig object. If provided, overrides individual burst parameters.
     """
     generator = ULBEventGenerator(csv_path)
     max_events = None if loop else (len(generator.df) if generator.df is not None else None)
@@ -109,6 +115,7 @@ def replay(
         burst_probability=burst_probability,
         burst_multiplier=burst_multiplier,
         burst_duration_events=burst_duration_events,
+        burst_config=burst_config,
     )
 
 
