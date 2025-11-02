@@ -48,27 +48,31 @@ class TestSynthEvent:
         assert event.customer_id.startswith('c')
         assert event.customer_id == "c42"
     
-    def test_merchant_category_from_mcc(self):
+    def test_merchant_category_from_mcc(self, patched_randoms):
         """Test merchant category is one of valid MCC values."""
+        mock_randint, mock_choices, mock_lognorm, mock_random = patched_randoms
+        mock_randint.return_value = 100
+        mock_lognorm.return_value = 50.0
+        mock_random.return_value = 0.5
+        
         for category in DEFAULT_FRAUD_CONFIG.mcc:
-            with patch('emitter.emit_stdout.random.randint', return_value=100):
-                with patch('emitter.emit_stdout.random.choices', return_value=[category]):
-                    with patch('emitter.emit_stdout.random.lognormvariate', return_value=50.0):
-                        with patch('emitter.emit_stdout.random.random', return_value=0.5):
-                            event = synth_event(0, 1000)
-                            assert event.merchant_cat == category
-                            assert event.merchant_cat in DEFAULT_FRAUD_CONFIG.mcc
+            mock_choices.return_value = [category]
+            event = synth_event(0, 1000)
+            assert event.merchant_cat == category
+            assert event.merchant_cat in DEFAULT_FRAUD_CONFIG.mcc
     
-    def test_timestamp_calculation(self):
+    def test_timestamp_calculation(self, patched_randoms):
         """Test timestamp is base_ts + event_num."""
-        with patch('emitter.emit_stdout.random.randint', return_value=100):
-            with patch('emitter.emit_stdout.random.choices', return_value=['grocery']):
-                with patch('emitter.emit_stdout.random.lognormvariate', return_value=50.0):
-                    with patch('emitter.emit_stdout.random.random', return_value=0.5):
-                        # Test various event numbers
-                        assert synth_event(0, 1000).ts == 1000
-                        assert synth_event(5, 1000).ts == 1005
-                        assert synth_event(10, 2000).ts == 2010
+        mock_randint, mock_choices, mock_lognorm, mock_random = patched_randoms
+        mock_randint.return_value = 100
+        mock_choices.return_value = ['grocery']
+        mock_lognorm.return_value = 50.0
+        mock_random.return_value = 0.5
+        
+        # Test various event numbers
+        assert synth_event(0, 1000).ts == 1000
+        assert synth_event(5, 1000).ts == 1005
+        assert synth_event(10, 2000).ts == 2010
     
     def test_no_fraud_all_conditions_false(self):
         """Test label=0 when no fraud conditions are met."""

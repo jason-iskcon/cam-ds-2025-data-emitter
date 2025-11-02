@@ -48,43 +48,44 @@ class TestKafkaSink:
         assert call_kwargs["linger.ms"] == 10
         assert call_kwargs["batch.size"] == 32768
     
-    def test_init_default_acks(self):
+    def test_init_default_acks(self, kafka_mock):
         """Test KafkaSink initialization with default acks."""
-        patcher, mock_producer_class, mock_producer = self._mock_confluent_kafka()
-        with patcher:
-            sink = KafkaSink(bootstrap="localhost:9092", topic="transactions")
-            
-            assert sink.acks == "1"  # Default
-            call_kwargs = mock_producer_class.call_args[0][0]
-            assert call_kwargs["acks"] == "1"
+        mock_producer_class, mock_producer = kafka_mock
+        sink = KafkaSink(bootstrap="localhost:9092", topic="transactions")
+        
+        assert sink.acks == "1"  # Default
+        call_kwargs = mock_producer_class.call_args[0][0]
+        assert call_kwargs["acks"] == "1"
     
-    def test_init_all_acks_modes(self):
+    def test_init_all_acks_modes(self, kafka_mock):
         """Test KafkaSink initialization with all valid acks modes."""
+        mock_producer_class, mock_producer = kafka_mock
         for acks in ('0', '1', 'all'):
-            patcher, mock_producer_class, mock_producer = self._mock_confluent_kafka()
-            with patcher:
-                sink = KafkaSink(
-                    bootstrap="localhost:9092",
-                    topic="transactions",
-                    acks=acks
-                )
-                assert sink.acks == acks
-                call_kwargs = mock_producer_class.call_args[0][0]
-                assert call_kwargs["acks"] == acks
+            # Reset mock call count for each iteration
+            mock_producer_class.reset_mock()
+            sink = KafkaSink(
+                bootstrap="localhost:9092",
+                topic="transactions",
+                acks=acks
+            )
+            assert sink.acks == acks
+            call_kwargs = mock_producer_class.call_args[0][0]
+            assert call_kwargs["acks"] == acks
     
-    def test_init_with_enum(self):
+    def test_init_with_enum(self, kafka_mock):
         """Test KafkaSink initialization with KafkaAcks enum."""
+        mock_producer_class, mock_producer = kafka_mock
         for acks_enum in KafkaAcks:
-            patcher, mock_producer_class, mock_producer = self._mock_confluent_kafka()
-            with patcher:
-                sink = KafkaSink(
-                    bootstrap="localhost:9092",
-                    topic="transactions",
-                    acks=acks_enum
-                )
-                assert sink.acks == acks_enum.value
-                call_kwargs = mock_producer_class.call_args[0][0]
-                assert call_kwargs["acks"] == acks_enum.value
+            # Reset mock call count for each iteration
+            mock_producer_class.reset_mock()
+            sink = KafkaSink(
+                bootstrap="localhost:9092",
+                topic="transactions",
+                acks=acks_enum
+            )
+            assert sink.acks == acks_enum.value
+            call_kwargs = mock_producer_class.call_args[0][0]
+            assert call_kwargs["acks"] == acks_enum.value
     
     def test_init_invalid_acks_raises_error(self):
         """Test KafkaSink initialization with invalid acks raises ValueError."""
@@ -110,22 +111,21 @@ class TestKafkaSink:
             with pytest.raises(ImportError, match="confluent-kafka package is required"):
                 KafkaSink(bootstrap="localhost:9092", topic="transactions")
     
-    def test_context_manager(self):
+    def test_context_manager(self, kafka_mock):
         """Test KafkaSink as context manager."""
-        patcher, mock_producer_class, mock_producer = self._mock_confluent_kafka()
+        mock_producer_class, mock_producer = kafka_mock
         mock_producer.flush.return_value = 0
-        with patcher:
-            with KafkaSink(bootstrap="localhost:9092", topic="transactions") as sink:
-                assert sink.acks == "1"
-                assert sink.producer == mock_producer
-            
-            # close() should be called on exit
-            mock_producer.flush.assert_called_once()
-            assert sink.producer is None
+        with KafkaSink(bootstrap="localhost:9092", topic="transactions") as sink:
+            assert sink.acks == "1"
+            assert sink.producer == mock_producer
+        
+        # close() should be called on exit
+        mock_producer.flush.assert_called_once()
+        assert sink.producer is None
     
-    def test_write_calls_producer(self):
+    def test_write_calls_producer(self, kafka_mock):
         """Test write method calls producer.produce()."""
-        patcher, mock_producer_class, mock_producer = self._mock_confluent_kafka()
+        mock_producer_class, mock_producer = kafka_mock
         event = {
             "tx_id": "tx_1",
             "customer_id": "c123",
@@ -133,21 +133,20 @@ class TestKafkaSink:
             "merchant_cat": "grocery",
             "ts": 1000
         }
-        with patcher:
-            sink = KafkaSink(bootstrap="localhost:9092", topic="transactions", acks="1")
-            sink.write(event)
-            
-            # Should call produce with topic and serialized JSON
-            mock_producer.produce.assert_called_once()
-            call_args = mock_producer.produce.call_args
-            assert call_args[0][0] == "transactions"  # topic
-            # Second arg should be JSON-encoded bytes
-            import json
-            decoded = json.loads(call_args[0][1].decode('utf-8'))
-            assert decoded == event
-            
-            # Should poll after produce
-            mock_producer.poll.assert_called_once_with(0)
+        sink = KafkaSink(bootstrap="localhost:9092", topic="transactions", acks="1")
+        sink.write(event)
+        
+        # Should call produce with topic and serialized JSON
+        mock_producer.produce.assert_called_once()
+        call_args = mock_producer.produce.call_args
+        assert call_args[0][0] == "transactions"  # topic
+        # Second arg should be JSON-encoded bytes
+        import json
+        decoded = json.loads(call_args[0][1].decode('utf-8'))
+        assert decoded == event
+        
+        # Should poll after produce
+        mock_producer.poll.assert_called_once_with(0)
     
     def test_write_no_callback_for_acks_zero(self):
         """Test write doesn't use callback when acks='0'."""
