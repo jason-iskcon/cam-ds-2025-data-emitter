@@ -95,7 +95,15 @@ class BurstController:
             multiplier: Rate multiplier during bursts
             duration_events: Number of events to emit during a burst
             base_rate: Base events per second rate
+            
+        Raises:
+            AssertionError: If parameters are invalid
         """
+        assert 0.0 <= probability <= 1.0, "probability must be in [0, 1]"
+        assert multiplier > 0, "multiplier must be positive"
+        assert duration_events > 0, "duration_events must be positive"
+        assert base_rate > 0, "base_rate must be positive"
+        
         self.probability = probability
         self.multiplier = multiplier
         self.duration_events = duration_events
@@ -108,8 +116,9 @@ class BurstController:
         return self.probability > 0 and self.remaining == 0 and random.random() < self.probability
     
     def start_burst(self) -> None:
-        """Start a new burst."""
-        self.remaining = self.duration_events
+        """Start a new burst (only if not already in one)."""
+        if self.remaining == 0:
+            self.remaining = self.duration_events
     
     def tick(self) -> float:
         """Advance burst state and return current interval.
