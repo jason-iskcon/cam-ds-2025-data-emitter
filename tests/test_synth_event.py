@@ -74,29 +74,31 @@ class TestSynthEvent:
         assert synth_event(5, 1000).ts == 1005
         assert synth_event(10, 2000).ts == 2010
     
-    def test_no_fraud_all_conditions_false(self):
+    def test_no_fraud_all_conditions_false(self, patched_randoms):
         """Test label=0 when no fraud conditions are met."""
         # Low amount, low-value category, not night
-        with patch('emitter.emit_stdout.random.randint', return_value=100):
-            with patch('emitter.emit_stdout.random.choices', return_value=['grocery']):
-                with patch('emitter.emit_stdout.random.lognormvariate', return_value=50.0):  # < 300
-                    with patch('emitter.emit_stdout.random.random', return_value=0.1):  # < 0.4
-                        # Hour 10 (not night), grocery (not high-value), amount 50 (< 300)
-                        # base_ts = 36000 (10 AM)
-                        event = synth_event(0, 36000)
-                        assert event.label == 0
+        mock_randint, mock_choices, mock_lognorm, mock_random = patched_randoms
+        mock_randint.return_value = 100
+        mock_choices.return_value = ['grocery']
+        mock_lognorm.return_value = 50.0  # < 300
+        mock_random.return_value = 0.1  # < 0.4
+        # Hour 10 (not night), grocery (not high-value), amount 50 (< 300)
+        # base_ts = 36000 (10 AM)
+        event = synth_event(0, 36000)
+        assert event.label == 0
     
-    def test_fraud_all_conditions_true(self):
+    def test_fraud_all_conditions_true(self, patched_randoms):
         """Test label=1 when all fraud conditions are met."""
         # High amount, luxury/online, night hours, probability check passes
-        with patch('emitter.emit_stdout.random.randint', return_value=100):
-            with patch('emitter.emit_stdout.random.choices', return_value=['luxury']):
-                with patch('emitter.emit_stdout.random.lognormvariate', return_value=500.0):  # > 300
-                    with patch('emitter.emit_stdout.random.random', return_value=0.3):  # < 0.4
-                        # Hour 2 (night), luxury (high-value), amount 500 (> 300)
-                        # base_ts = 7200 (2 AM)
-                        event = synth_event(0, 7200)
-                        assert event.label == 1
+        mock_randint, mock_choices, mock_lognorm, mock_random = patched_randoms
+        mock_randint.return_value = 100
+        mock_choices.return_value = ['luxury']
+        mock_lognorm.return_value = 500.0  # > 300
+        mock_random.return_value = 0.3  # < 0.4
+        # Hour 2 (night), luxury (high-value), amount 500 (> 300)
+        # base_ts = 7200 (2 AM)
+        event = synth_event(0, 7200)
+        assert event.label == 1
     
     def test_fraud_amount_too_low(self):
         """Test label=0 when amount threshold not met."""

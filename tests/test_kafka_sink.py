@@ -148,27 +148,26 @@ class TestKafkaSink:
         # Should poll after produce
         mock_producer.poll.assert_called_once_with(0)
     
-    def test_write_no_callback_for_acks_zero(self):
+    def test_write_no_callback_for_acks_zero(self, kafka_mock):
         """Test write doesn't use callback when acks='0'."""
-        patcher, mock_producer_class, mock_producer = self._mock_confluent_kafka()
+        mock_producer_class, mock_producer = kafka_mock
         event = {"tx_id": "tx_1", "customer_id": "c1", "amount": 100.0, "merchant_cat": "grocery", "ts": 1000}
-        with patcher:
-            sink = KafkaSink(bootstrap="localhost:9092", topic="transactions", acks="0")
-            sink.write(event)
-            
-            # Callback should be None for acks='0'
-            call_args = mock_producer.produce.call_args
-            assert call_args[1]["callback"] is None
+        sink = KafkaSink(bootstrap="localhost:9092", topic="transactions", acks="0")
+        sink.write(event)
+        
+        # Callback should be None for acks='0'
+        call_args = mock_producer.produce.call_args
+        assert call_args[1]["callback"] is None
     
-    def test_flush_calls_producer_flush(self):
+    def test_flush_calls_producer_flush(self, kafka_mock):
         """Test flush method calls producer.flush()."""
-        patcher, mock_producer_class, mock_producer = self._mock_confluent_kafka()
+        mock_producer_class, mock_producer = kafka_mock
+        mock_producer.reset_mock()  # Reset mock state from previous tests
         mock_producer.flush.return_value = 0
-        with patcher:
-            sink = KafkaSink(bootstrap="localhost:9092", topic="transactions")
-            sink.flush()
-            
-            mock_producer.flush.assert_called_once_with(timeout=10.0)
+        sink = KafkaSink(bootstrap="localhost:9092", topic="transactions")
+        sink.flush()
+        
+        mock_producer.flush.assert_called_once_with(timeout=10.0)
     
     @patch('builtins.print')
     def test_flush_warns_on_undelivered(self, mock_print):
@@ -185,18 +184,18 @@ class TestKafkaSink:
             assert "5" in call_args
             assert "undelivered" in call_args.lower()
     
-    def test_close_flushes_and_clears_producer(self):
+    def test_close_flushes_and_clears_producer(self, kafka_mock):
         """Test close method flushes and clears producer."""
-        patcher, mock_producer_class, mock_producer = self._mock_confluent_kafka()
+        mock_producer_class, mock_producer = kafka_mock
+        mock_producer.reset_mock()  # Reset mock state from previous tests
         mock_producer.flush.return_value = 0
-        with patcher:
-            sink = KafkaSink(bootstrap="localhost:9092", topic="transactions")
-            assert sink.producer == mock_producer
-            
-            sink.close()
-            
-            mock_producer.flush.assert_called_once()
-            assert sink.producer is None
+        sink = KafkaSink(bootstrap="localhost:9092", topic="transactions")
+        assert sink.producer == mock_producer
+        
+        sink.close()
+        
+        mock_producer.flush.assert_called_once()
+        assert sink.producer is None
     
     @patch('builtins.print')
     def test_close_handles_flush_error(self, mock_print):
@@ -242,19 +241,19 @@ class TestKafkaSink:
             mock_print.assert_called_once()
             assert "Delivery failed" in str(mock_print.call_args)
     
-    def test_operations_after_close_are_safe(self):
+    def test_operations_after_close_are_safe(self, kafka_mock):
         """Test calling methods after close doesn't crash."""
-        patcher, _, mock_producer = self._mock_confluent_kafka()
+        mock_producer_class, mock_producer = kafka_mock
+        mock_producer.reset_mock()  # Reset mock state from previous tests
         mock_producer.flush.return_value = 0
-        with patcher:
-            sink = KafkaSink(bootstrap="localhost:9092", topic="transactions")
-            sink.close()
-            
-            # Should be safe to call again
-            sink.close()  # No crash
-            sink.flush()  # Should be no-op (producer is None)
-            
-            # write should also be safe (returns early if producer is None)
-            event = {"tx_id": "tx_1", "customer_id": "c1", "amount": 100.0, "merchant_cat": "grocery", "ts": 1000}
-            sink.write(event)  # Should return without error
+        sink = KafkaSink(bootstrap="localhost:9092", topic="transactions")
+        sink.close()
+        
+        # Should be safe to call again
+        sink.close()  # No crash
+        sink.flush()  # Should be no-op (producer is None)
+        
+        # write should also be safe (returns early if producer is None)
+        event = {"tx_id": "tx_1", "customer_id": "c1", "amount": 100.0, "merchant_cat": "grocery", "ts": 1000}
+        sink.write(event)  # Should return without error
 
