@@ -1,7 +1,5 @@
 """Tests for StdoutSink."""
 import json
-from io import StringIO
-from unittest.mock import patch
 
 import pytest
 
@@ -11,7 +9,7 @@ from emitter.sinks import StdoutSink
 class TestStdoutSink:
     """Test StdoutSink functionality."""
     
-    def test_write_basic_event(self):
+    def test_write_basic_event(self, capsys):
         """Test writing a basic event."""
         event = {
             "tx_id": "tx_1",
@@ -22,17 +20,16 @@ class TestStdoutSink:
             "label": 0
         }
         sink = StdoutSink()
+        sink.write(event)
+        captured = capsys.readouterr()
+        output = captured.out.strip()
         
-        with patch('sys.stdout', new=StringIO()) as fake_out:
-            sink.write(event)
-            output = fake_out.getvalue().strip()
-            
-            # Should output valid JSON
-            assert output
-            parsed = json.loads(output)
-            assert parsed == event
+        # Should output valid JSON
+        assert output
+        parsed = json.loads(output)
+        assert parsed == event
     
-    def test_write_event_with_features(self):
+    def test_write_event_with_features(self, capsys):
         """Test writing event with features dict."""
         event = {
             "tx_id": "tx_1",
@@ -44,16 +41,15 @@ class TestStdoutSink:
             "features": {"V1": 0.5, "V2": -0.2, "Time": 100}
         }
         sink = StdoutSink()
-        
-        with patch('sys.stdout', new=StringIO()) as fake_out:
-            sink.write(event)
-            output = fake_out.getvalue().strip()
-            parsed = json.loads(output)
-            assert parsed == event
-            assert parsed["features"]["V1"] == 0.5
-            assert parsed["features"]["Time"] == 100
+        sink.write(event)
+        captured = capsys.readouterr()
+        output = captured.out.strip()
+        parsed = json.loads(output)
+        assert parsed == event
+        assert parsed["features"]["V1"] == 0.5
+        assert parsed["features"]["Time"] == 100
     
-    def test_write_multiple_events(self):
+    def test_write_multiple_events(self, capsys):
         """Test writing multiple events (one per line)."""
         events = [
             {"tx_id": "tx_1", "customer_id": "c1", "amount": 50.0, "merchant_cat": "grocery", "ts": 1000},
@@ -61,23 +57,22 @@ class TestStdoutSink:
             {"tx_id": "tx_3", "customer_id": "c3", "amount": 100.0, "merchant_cat": "fuel", "ts": 1002},
         ]
         sink = StdoutSink()
+        for event in events:
+            sink.write(event)
         
-        with patch('sys.stdout', new=StringIO()) as fake_out:
-            for event in events:
-                sink.write(event)
-            
-            output = fake_out.getvalue()
-            lines = output.strip().split('\n')
-            
-            # Should have 3 lines (one per event)
-            assert len(lines) == 3
-            
-            # Each line should be valid JSON
-            for i, line in enumerate(lines):
-                parsed = json.loads(line)
-                assert parsed == events[i]
+        captured = capsys.readouterr()
+        output = captured.out
+        lines = output.strip().split('\n')
+        
+        # Should have 3 lines (one per event)
+        assert len(lines) == 3
+        
+        # Each line should be valid JSON
+        for i, line in enumerate(lines):
+            parsed = json.loads(line)
+            assert parsed == events[i]
     
-    def test_ensure_ascii_false_unicode_support(self):
+    def test_ensure_ascii_false_unicode_support(self, capsys):
         """Test ensure_ascii=False preserves unicode characters."""
         event = {
             "tx_id": "tx_1",
@@ -88,22 +83,21 @@ class TestStdoutSink:
             "features": {"name": "café", "city": "São Paulo"}
         }
         sink = StdoutSink()
+        sink.write(event)
+        captured = capsys.readouterr()
+        output = captured.out.strip()
         
-        with patch('sys.stdout', new=StringIO()) as fake_out:
-            sink.write(event)
-            output = fake_out.getvalue().strip()
-            
-            # Should preserve unicode
-            parsed = json.loads(output)
-            assert parsed["merchant_cat"] == "商店"
-            assert parsed["features"]["name"] == "café"
-            assert parsed["features"]["city"] == "São Paulo"
-            
-            # Verify unicode characters are in output string
-            assert "商店" in output
-            assert "café" in output
+        # Should preserve unicode
+        parsed = json.loads(output)
+        assert parsed["merchant_cat"] == "商店"
+        assert parsed["features"]["name"] == "café"
+        assert parsed["features"]["city"] == "São Paulo"
+        
+        # Verify unicode characters are in output string
+        assert "商店" in output
+        assert "café" in output
     
-    def test_write_event_with_none_values(self):
+    def test_write_event_with_none_values(self, capsys):
         """Test writing event with None values."""
         event = {
             "tx_id": "tx_1",
@@ -115,16 +109,15 @@ class TestStdoutSink:
             "features": {"V1": 0.5, "V2": None}
         }
         sink = StdoutSink()
+        sink.write(event)
+        captured = capsys.readouterr()
+        output = captured.out.strip()
+        parsed = json.loads(output)
         
-        with patch('sys.stdout', new=StringIO()) as fake_out:
-            sink.write(event)
-            output = fake_out.getvalue().strip()
-            parsed = json.loads(output)
-            
-            assert parsed["label"] is None
-            assert parsed["features"]["V2"] is None
+        assert parsed["label"] is None
+        assert parsed["features"]["V2"] is None
     
-    def test_write_event_with_complex_features(self):
+    def test_write_event_with_complex_features(self, capsys):
         """Test writing event with complex nested features."""
         event = {
             "tx_id": "tx_1",
@@ -141,14 +134,13 @@ class TestStdoutSink:
             }
         }
         sink = StdoutSink()
+        sink.write(event)
+        captured = capsys.readouterr()
+        output = captured.out.strip()
+        parsed = json.loads(output)
         
-        with patch('sys.stdout', new=StringIO()) as fake_out:
-            sink.write(event)
-            output = fake_out.getvalue().strip()
-            parsed = json.loads(output)
-            
-            assert parsed["features"]["metadata"]["source"] == "ulb"
-            assert parsed["features"]["metadata"]["version"] == 1
+        assert parsed["features"]["metadata"]["source"] == "ulb"
+        assert parsed["features"]["metadata"]["version"] == 1
     
     def test_protocol_compliance(self):
         """Test StdoutSink conforms to Sink protocol."""
@@ -158,7 +150,7 @@ class TestStdoutSink:
         # Verify protocol compliance
         assert isinstance(sink, Sink)
     
-    def test_write_empty_features_dict(self):
+    def test_write_empty_features_dict(self, capsys):
         """Test writing event with empty features dict."""
         event = {
             "tx_id": "tx_1",
@@ -169,14 +161,13 @@ class TestStdoutSink:
             "features": {}
         }
         sink = StdoutSink()
-        
-        with patch('sys.stdout', new=StringIO()) as fake_out:
-            sink.write(event)
-            output = fake_out.getvalue().strip()
-            parsed = json.loads(output)
-            assert parsed["features"] == {}
+        sink.write(event)
+        captured = capsys.readouterr()
+        output = captured.out.strip()
+        parsed = json.loads(output)
+        assert parsed["features"] == {}
     
-    def test_write_newline_handling(self):
+    def test_write_newline_handling(self, capsys):
         """Test that each write produces one line (no extra newlines)."""
         event = {
             "tx_id": "tx_1",
@@ -186,17 +177,16 @@ class TestStdoutSink:
             "ts": 1000
         }
         sink = StdoutSink()
+        sink.write(event)
+        captured = capsys.readouterr()
+        output = captured.out
         
-        with patch('sys.stdout', new=StringIO()) as fake_out:
-            sink.write(event)
-            output = fake_out.getvalue()
-            
-            # Should be exactly one line (print adds newline, so output ends with \n)
-            lines = output.rstrip('\n').split('\n')
-            assert len(lines) == 1
-            
-            # Content should be valid JSON
-            assert json.loads(lines[0]) == event
+        # Should be exactly one line (print adds newline, so output ends with \n)
+        lines = output.rstrip('\n').split('\n')
+        assert len(lines) == 1
+        
+        # Content should be valid JSON
+        assert json.loads(lines[0]) == event
     
     def test_write_non_serializable_raises_error(self):
         """Test writing non-JSON-serializable data raises ValueError."""
