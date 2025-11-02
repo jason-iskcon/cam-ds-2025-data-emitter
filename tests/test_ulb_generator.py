@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from emitter.replay_ulb_stdout import ULBEventGenerator, _get_column_value, CUSTOMER_ID_MODULO
+from emitter.replay_ulb_stdout import ULBEventGenerator, _get_column_value
 
 
 @pytest.fixture

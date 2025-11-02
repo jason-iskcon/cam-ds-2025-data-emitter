@@ -2,7 +2,6 @@
 import pytest
 from unittest.mock import patch
 
-from emitter.config import FraudConfig
 from emitter.emit_stdout import DEFAULT_FRAUD_CONFIG, synth_event
 
 
