@@ -87,23 +87,22 @@ class TestKafkaSink:
             call_kwargs = mock_producer_class.call_args[0][0]
             assert call_kwargs["acks"] == acks_enum.value
     
-    def test_init_invalid_acks_raises_error(self):
+    def test_init_invalid_acks_raises_error(self, kafka_mock):
         """Test KafkaSink initialization with invalid acks raises ValueError."""
-        patcher, _, _ = self._mock_confluent_kafka()
-        with patcher:
-            with pytest.raises(ValueError, match="acks must be one of"):
-                KafkaSink(
-                    bootstrap="localhost:9092",
-                    topic="transactions",
-                    acks="invalid"
-                )
-            
-            with pytest.raises(ValueError, match="acks must be one of"):
-                KafkaSink(
-                    bootstrap="localhost:9092",
-                    topic="transactions",
-                    acks="2"
-                )
+        # Note: This test doesn't use the mock_producer since validation happens before Producer creation
+        with pytest.raises(ValueError, match="acks must be one of"):
+            KafkaSink(
+                bootstrap="localhost:9092",
+                topic="transactions",
+                acks="invalid"
+            )
+        
+        with pytest.raises(ValueError, match="acks must be one of"):
+            KafkaSink(
+                bootstrap="localhost:9092",
+                topic="transactions",
+                acks="2"
+            )
     
     def test_init_missing_confluent_kafka_raises_error(self):
         """Test KafkaSink initialization without confluent-kafka raises ImportError."""
@@ -170,19 +169,19 @@ class TestKafkaSink:
         mock_producer.flush.assert_called_once_with(timeout=10.0)
     
     @patch('builtins.print')
-    def test_flush_warns_on_undelivered(self, mock_print):
+    def test_flush_warns_on_undelivered(self, mock_print, kafka_mock):
         """Test flush warns when messages remain undelivered."""
-        patcher, mock_producer_class, mock_producer = self._mock_confluent_kafka()
+        mock_producer_class, mock_producer = kafka_mock
+        mock_producer.reset_mock()  # Reset mock state from previous tests
         mock_producer.flush.return_value = 5  # 5 messages undelivered
-        with patcher:
-            sink = KafkaSink(bootstrap="localhost:9092", topic="transactions")
-            sink.flush()
-            
-            # Check print was called with warning message
-            mock_print.assert_called()
-            call_args = str(mock_print.call_args_list)
-            assert "5" in call_args
-            assert "undelivered" in call_args.lower()
+        sink = KafkaSink(bootstrap="localhost:9092", topic="transactions")
+        sink.flush()
+        
+        # Check print was called with warning message
+        mock_print.assert_called()
+        call_args = str(mock_print.call_args_list)
+        assert "5" in call_args
+        assert "undelivered" in call_args.lower()
     
     def test_close_flushes_and_clears_producer(self, kafka_mock):
         """Test close method flushes and clears producer."""
@@ -198,48 +197,48 @@ class TestKafkaSink:
         assert sink.producer is None
     
     @patch('builtins.print')
-    def test_close_handles_flush_error(self, mock_print):
+    def test_close_handles_flush_error(self, mock_print, kafka_mock):
         """Test close handles errors during flush gracefully."""
-        patcher, mock_producer_class, mock_producer = self._mock_confluent_kafka()
+        mock_producer_class, mock_producer = kafka_mock
+        mock_producer.reset_mock()  # Reset mock state from previous tests
         mock_producer.flush.side_effect = Exception("Flush error")
-        with patcher:
-            sink = KafkaSink(bootstrap="localhost:9092", topic="transactions")
-            
-            # Should not raise, just warn
-            sink.close()
-            
-            # Should still clear producer
-            assert sink.producer is None
-            # Should print warning
-            mock_print.assert_called()
-            call_args = str(mock_print.call_args_list)
-            assert "Warning" in call_args or "Error" in call_args
+        sink = KafkaSink(bootstrap="localhost:9092", topic="transactions")
+        
+        # Should not raise, just warn
+        sink.close()
+        
+        # Should still clear producer
+        assert sink.producer is None
+        # Should print warning
+        mock_print.assert_called()
+        call_args = str(mock_print.call_args_list)
+        assert "Warning" in call_args or "Error" in call_args
     
-    def test_write_non_serializable_raises_error(self):
+    def test_write_non_serializable_raises_error(self, kafka_mock):
         """Test writing non-JSON-serializable data raises ValueError."""
         import datetime
-        patcher, _, mock_producer = self._mock_confluent_kafka()
-        with patcher:
-            sink = KafkaSink(bootstrap="localhost:9092", topic="transactions")
-            event = {"ts": datetime.datetime.now()}
-            
-            with pytest.raises(ValueError, match="Failed to serialize"):
-                sink.write(event)
+        mock_producer_class, mock_producer = kafka_mock
+        mock_producer.reset_mock()  # Reset mock state from previous tests
+        sink = KafkaSink(bootstrap="localhost:9092", topic="transactions")
+        event = {"ts": datetime.datetime.now()}
+        
+        with pytest.raises(ValueError, match="Failed to serialize"):
+            sink.write(event)
     
     @patch('builtins.print')
-    def test_delivery_callback_on_error(self, mock_print):
+    def test_delivery_callback_on_error(self, mock_print, kafka_mock):
         """Test delivery callback logs errors."""
-        patcher, _, mock_producer = self._mock_confluent_kafka()
-        with patcher:
-            sink = KafkaSink(bootstrap="localhost:9092", topic="transactions")
-            
-            # Simulate delivery error
-            error = Exception("Broker unavailable")
-            sink._delivery_callback(error, None)
-            
-            # Should print error
-            mock_print.assert_called_once()
-            assert "Delivery failed" in str(mock_print.call_args)
+        mock_producer_class, mock_producer = kafka_mock
+        mock_producer.reset_mock()  # Reset mock state from previous tests
+        sink = KafkaSink(bootstrap="localhost:9092", topic="transactions")
+        
+        # Simulate delivery error
+        error = Exception("Broker unavailable")
+        sink._delivery_callback(error, None)
+        
+        # Should print error
+        mock_print.assert_called_once()
+        assert "Delivery failed" in str(mock_print.call_args)
     
     def test_operations_after_close_are_safe(self, kafka_mock):
         """Test calling methods after close doesn't crash."""
