@@ -133,6 +133,51 @@ class BurstController:
         return 1.0 / self.base_rate
 
 
+def _should_continue(event_num: int, max_events: int | None) -> bool:
+    """Check if event streaming should continue.
+    
+    Args:
+        event_num: Current event number
+        max_events: Maximum number of events (None for unlimited)
+        
+    Returns:
+        True if should continue, False if should stop
+    """
+    return not _shutdown_requested and (max_events is None or event_num < max_events)
+
+
+def _handle_burst_and_sleep(
+    burst_controller: BurstController,
+    jitter: float,
+) -> bool:
+    """Handle burst logic and sleep with jitter.
+    
+    Args:
+        burst_controller: Burst controller instance
+        jitter: Jitter fraction (0.0-1.0) for timing variance
+        
+    Returns:
+        True if sleep completed, False if shutdown requested
+    """
+    if burst_controller.should_start_burst():
+        burst_controller.start_burst()
+    
+    interval = burst_controller.tick()
+    return sleep_with_jitter(interval, jitter)
+
+
+def _cleanup_sink(sink: Sink) -> None:
+    """Ensure sink is properly flushed and closed.
+    
+    Args:
+        sink: Sink instance to cleanup
+    """
+    if hasattr(sink, 'flush'):
+        sink.flush()
+    if hasattr(sink, 'close'):
+        sink.close()
+
+
 def stream_events(
     event_generator: Callable[[int, int], TransactionEvent],
     rate_per_sec: float,
@@ -183,21 +228,13 @@ def stream_events(
     )
     
     try:
-        while not _shutdown_requested and (max_events is None or event_num < max_events):
+        while _should_continue(event_num, max_events):
             event = event_generator(event_num, base_ts)
             emit_event(event, sink)
             event_num += 1
             
-            if not _shutdown_requested and (max_events is None or event_num < max_events):
-                if burst_controller.should_start_burst():
-                    burst_controller.start_burst()
-                
-                interval = burst_controller.tick()
-                if not sleep_with_jitter(interval, jitter):
+            if _should_continue(event_num, max_events):
+                if not _handle_burst_and_sleep(burst_controller, jitter):
                     break  # Shutdown requested during sleep
     finally:
-        # Ensure Kafka producer flushes and closes if it's a KafkaSink
-        if hasattr(sink, 'flush'):
-            sink.flush()
-        if hasattr(sink, 'close'):
-            sink.close()
+        _cleanup_sink(sink)
