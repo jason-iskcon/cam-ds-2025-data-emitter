@@ -20,14 +20,6 @@ class TestKafkaSink:
         with patch.dict('sys.modules', {'confluent_kafka': mock_module}):
             yield mock_producer_class, mock_producer
     
-    def _mock_confluent_kafka(self):
-        """Create mock confluent_kafka module (kept for backward compatibility)."""
-        mock_producer = MagicMock()
-        mock_producer_class = MagicMock(return_value=mock_producer)
-        mock_module = MagicMock()
-        mock_module.Producer = mock_producer_class
-        return patch.dict('sys.modules', {'confluent_kafka': mock_module}), mock_producer_class, mock_producer
-    
     def test_init_valid_config(self, kafka_mock):
         """Test KafkaSink initialization with valid config."""
         mock_producer_class, mock_producer = kafka_mock
