@@ -13,10 +13,9 @@ CUSTOMER_ID_MODULO = 5000
 
 def _get_column_value(row: pd.Series, primary: str, fallback: str = "", default=None):
     """Get column value with fallback column name."""
-    if primary in row:
-        return row[primary]
-    if fallback and fallback in row:
-        return row[fallback]
+    for col in (primary, fallback):
+        if col and col in row:
+            return row[col]
     return default
 
 
@@ -31,6 +30,8 @@ class ULBEventGenerator:
     def _load_data(self) -> None:
         """Load CSV data."""
         self.df = pd.read_csv(self.csv_path)
+        if self.df.empty:
+            raise ValueError(f"CSV file {self.csv_path} is empty")
     
     def __call__(self, event_num: int, base_ts: int) -> TransactionEvent:
         """Generate event from CSV row at position event_num % len(df).
@@ -55,10 +56,12 @@ class ULBEventGenerator:
             if col not in exclude_cols:
                 val = row[col]
                 # Convert numpy types to native Python types for JSON serialization
-                if hasattr(val, 'item'):  # numpy scalar
-                    val = val.item()
-                elif pd.isna(val):
+                # Check pd.isna() BEFORE hasattr('item') because numpy NaN has .item() 
+                # but calling .item() on NaN returns Python nan (not None), breaking JSON
+                if pd.isna(val):
                     val = None
+                elif hasattr(val, 'item'):  # numpy scalar
+                    val = val.item()
                 features[col] = val
         
         return TransactionEvent(
