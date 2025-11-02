@@ -97,27 +97,7 @@ class KafkaSink:
             )
         
         self.topic = config.topic
-        
-        # Normalize acks: convert enum to string, or validate string input
-        acks_input = config.acks
-        if acks_input is None:
-            acks_value = "1"
-        elif isinstance(acks_input, KafkaAcks):
-            acks_value = acks_input.value
-        elif isinstance(acks_input, str):
-            # Validate string value
-            valid_strings = {e.value for e in KafkaAcks}
-            if acks_input not in valid_strings:
-                raise ValueError(
-                    f"acks must be one of {valid_strings} or a KafkaAcks enum, got {acks_input!r}"
-                )
-            acks_value = acks_input
-        else:
-            raise TypeError(
-                f"acks must be str, KafkaAcks, or None, got {type(acks_input).__name__}"
-            )
-        
-        self.acks = acks_value
+        self.acks = self._normalize_acks(config.acks)
         
         producer_config = {
             "bootstrap.servers": config.bootstrap,
@@ -128,6 +108,37 @@ class KafkaSink:
         }
         
         self.producer = Producer(producer_config)
+    
+    @staticmethod
+    def _normalize_acks(acks_input: str | KafkaAcks | None) -> str:
+        """Normalize acks parameter to string value.
+        
+        Args:
+            acks_input: acks value as string, KafkaAcks enum, or None
+            
+        Returns:
+            Normalized acks string value
+            
+        Raises:
+            ValueError: If string value is not valid
+            TypeError: If type is not str, KafkaAcks, or None
+        """
+        if acks_input is None:
+            return "1"
+        elif isinstance(acks_input, KafkaAcks):
+            return acks_input.value
+        elif isinstance(acks_input, str):
+            # Validate string value
+            valid_strings = {e.value for e in KafkaAcks}
+            if acks_input not in valid_strings:
+                raise ValueError(
+                    f"acks must be one of {valid_strings} or a KafkaAcks enum, got {acks_input!r}"
+                )
+            return acks_input
+        else:
+            raise TypeError(
+                f"acks must be str, KafkaAcks, or None, got {type(acks_input).__name__}"
+            )
     
     def __repr__(self) -> str:
         """Return string representation."""
