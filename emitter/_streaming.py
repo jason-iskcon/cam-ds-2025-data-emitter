@@ -1,11 +1,27 @@
 """Shared utilities for event streaming."""
 import argparse
 import random
+import signal
 import time
 from typing import Callable
 
 from emitter.contracts import TransactionEvent
 from emitter.sinks import Sink, StdoutSink
+
+# Global flag for graceful shutdown
+_shutdown_requested = False
+
+
+def _signal_handler(signum, frame):
+    """Handle shutdown signals gracefully."""
+    global _shutdown_requested
+    _shutdown_requested = True
+
+
+def setup_signal_handlers():
+    """Set up signal handlers for graceful shutdown."""
+    signal.signal(signal.SIGINT, _signal_handler)
+    signal.signal(signal.SIGTERM, _signal_handler)
 
 # Default burst configuration constants
 DEFAULT_BURST_MULTIPLIER = 5.0
@@ -30,22 +46,36 @@ def emit_event(event: TransactionEvent, sink: Sink) -> None:
     sink.write(event.model_dump())
 
 
-def sleep_with_jitter(seconds: float, jitter: float = 0.0) -> None:
+def sleep_with_jitter(seconds: float, jitter: float = 0.0) -> bool:
     """Sleep ~seconds with optional jitter fraction (0.0–1.0).
     
     Args:
         seconds: Base sleep duration
         jitter: Jitter fraction (0.0-1.0). jitter=0.2 → N(seconds, (0.2*seconds)^2) clamped to >= 0
-    """
-    if seconds <= 0:
-        return
-    if jitter <= 0:
-        time.sleep(seconds)
-        return
     
-    std = jitter * seconds
-    duration = max(0.0, random.gauss(seconds, std))
-    time.sleep(duration)
+    Returns:
+        True if sleep completed, False if interrupted by shutdown signal
+    """
+    global _shutdown_requested
+    if seconds <= 0:
+        return not _shutdown_requested
+    
+    if jitter <= 0:
+        duration = seconds
+    else:
+        std = jitter * seconds
+        duration = max(0.0, random.gauss(seconds, std))
+    
+    # Sleep in small increments to allow checking shutdown flag
+    elapsed = 0.0
+    chunk = min(0.1, duration)  # Check every 100ms
+    while elapsed < duration and not _shutdown_requested:
+        remaining = duration - elapsed
+        sleep_time = min(chunk, remaining)
+        time.sleep(sleep_time)
+        elapsed += sleep_time
+    
+    return not _shutdown_requested
 
 
 class BurstController:
@@ -118,6 +148,8 @@ def stream_events(
     if sink is None:
         sink = StdoutSink()
     
+    setup_signal_handlers()
+    
     base_ts = int(time.time())
     event_num = 0
     burst_controller = BurstController(
@@ -128,17 +160,18 @@ def stream_events(
     )
     
     try:
-        while max_events is None or event_num < max_events:
+        while not _shutdown_requested and (max_events is None or event_num < max_events):
             event = event_generator(event_num, base_ts)
             emit_event(event, sink)
             event_num += 1
             
-            if max_events is None or event_num < max_events:
+            if not _shutdown_requested and (max_events is None or event_num < max_events):
                 if burst_controller.should_start_burst():
                     burst_controller.start_burst()
                 
                 interval = burst_controller.tick()
-                sleep_with_jitter(interval, jitter)
+                if not sleep_with_jitter(interval, jitter):
+                    break  # Shutdown requested during sleep
     finally:
         # Ensure Kafka producer flushes and closes if it's a KafkaSink
         if hasattr(sink, 'flush'):
