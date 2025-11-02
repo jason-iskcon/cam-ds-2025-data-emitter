@@ -3,6 +3,7 @@ import json
 import sys
 from typing import Any, Protocol, runtime_checkable
 
+from emitter.config import KafkaConfig
 from emitter.enums import KafkaAcks
 
 
@@ -53,22 +54,40 @@ class KafkaSink:
     
     def __init__(
         self,
-        bootstrap: str,
-        topic: str,
+        bootstrap: str | None = None,
+        topic: str | None = None,
         acks: str | KafkaAcks | None = "1",
         linger_ms: int = 5,
         batch_size: int = 16384,
+        config: KafkaConfig | None = None,
     ):
         """Initialize Kafka sink.
         
         Args:
-            bootstrap: Kafka broker address (e.g., 'localhost:9092' or 'redpanda:9092')
-            topic: Kafka topic name to write events to
+            bootstrap: Kafka broker address (e.g., 'localhost:9092' or 'redpanda:9092').
+                      Ignored if config is provided.
+            topic: Kafka topic name to write events to. Ignored if config is provided.
             acks: Number of acknowledgments required. Can be '0', '1', 'all' (string),
-                  KafkaAcks enum, or None (defaults to '1')
-            linger_ms: Milliseconds to wait before sending a batch
-            batch_size: Batch size in bytes
+                  KafkaAcks enum, or None (defaults to '1'). Ignored if config is provided.
+            linger_ms: Milliseconds to wait before sending a batch. Ignored if config is provided.
+            batch_size: Batch size in bytes. Ignored if config is provided.
+            config: KafkaConfig object. If provided, overrides individual parameters.
+        
+        Raises:
+            ValueError: If required parameters are missing or invalid
         """
+        # Use config if provided, otherwise use individual parameters (backward compatibility)
+        if config is None:
+            if bootstrap is None or topic is None:
+                raise ValueError("bootstrap and topic are required when config is not provided")
+            config = KafkaConfig(
+                bootstrap=bootstrap,
+                topic=topic,
+                acks=acks,
+                linger_ms=linger_ms,
+                batch_size=batch_size,
+            )
+        
         try:
             from confluent_kafka import Producer
         except ImportError:
@@ -77,37 +96,38 @@ class KafkaSink:
                 "Install with: pip install confluent-kafka"
             )
         
-        self.topic = topic
+        self.topic = config.topic
         
         # Normalize acks: convert enum to string, or validate string input
-        if acks is None:
+        acks_input = config.acks
+        if acks_input is None:
             acks_value = "1"
-        elif isinstance(acks, KafkaAcks):
-            acks_value = acks.value
-        elif isinstance(acks, str):
+        elif isinstance(acks_input, KafkaAcks):
+            acks_value = acks_input.value
+        elif isinstance(acks_input, str):
             # Validate string value
             valid_strings = {e.value for e in KafkaAcks}
-            if acks not in valid_strings:
+            if acks_input not in valid_strings:
                 raise ValueError(
-                    f"acks must be one of {valid_strings} or a KafkaAcks enum, got {acks!r}"
+                    f"acks must be one of {valid_strings} or a KafkaAcks enum, got {acks_input!r}"
                 )
-            acks_value = acks
+            acks_value = acks_input
         else:
             raise TypeError(
-                f"acks must be str, KafkaAcks, or None, got {type(acks).__name__}"
+                f"acks must be str, KafkaAcks, or None, got {type(acks_input).__name__}"
             )
         
         self.acks = acks_value
         
-        config = {
-            "bootstrap.servers": bootstrap,
+        producer_config = {
+            "bootstrap.servers": config.bootstrap,
             "client.id": "emitter",
             "acks": self.acks,
-            "linger.ms": linger_ms,
-            "batch.size": batch_size,
+            "linger.ms": config.linger_ms,
+            "batch.size": config.batch_size,
         }
         
-        self.producer = Producer(config)
+        self.producer = Producer(producer_config)
     
     def __repr__(self) -> str:
         """Return string representation."""
