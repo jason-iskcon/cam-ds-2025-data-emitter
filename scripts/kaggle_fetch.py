@@ -12,6 +12,7 @@ import shutil
 import subprocess
 import sys
 
+
 def find_kaggle_exe():
     """Find kaggle executable in venv Scripts/bin or PATH."""
     if sys.executable:
@@ -20,14 +21,14 @@ def find_kaggle_exe():
             exe_path = scripts_dir / exe_name
             if exe_path.exists():
                 return str(exe_path)
-    
+
     return shutil.which("kaggle") or shutil.which("kaggle.exe")
 
 
 def load_kaggle_credentials():
     """Load kaggle credentials from .kaggle/kaggle.json."""
     kaggle_json = pathlib.Path(__file__).parent.parent / ".kaggle" / "kaggle.json"
-    
+
     try:
         with open(kaggle_json) as f:
             config = json.load(f)
@@ -53,7 +54,9 @@ if __name__ == "__main__":
 
     kaggle_cmd = find_kaggle_exe()
     if not kaggle_cmd:
-        print("ERROR: kaggle executable not found. Install with: pip install kaggle", file=sys.stderr)
+        print(
+            "ERROR: kaggle executable not found. Install with: pip install kaggle", file=sys.stderr
+        )
         sys.exit(1)
 
     username, key = load_kaggle_credentials()
@@ -64,7 +67,7 @@ if __name__ == "__main__":
     try:
         subprocess.check_call(
             [kaggle_cmd, "datasets", "download", "-d", args.dataset, "-p", str(tmp), "--unzip"],
-            env=env
+            env=env,
         )
     except subprocess.CalledProcessError as e:
         print(f"ERROR: Failed to download dataset: {e}", file=sys.stderr)

@@ -2,6 +2,7 @@
 from pydantic import BaseModel, Field
 from typing import Any
 
+
 class TransactionEvent(BaseModel):
     tx_id: str = Field(min_length=1)
     customer_id: str = Field(min_length=1)

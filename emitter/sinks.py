@@ -1,4 +1,5 @@
 """Event sinks for emitting transaction events to different destinations."""
+
 import json
 import sys
 from typing import Any, Protocol, runtime_checkable
@@ -10,14 +11,14 @@ from emitter.enums import KafkaAcks
 @runtime_checkable
 class Sink(Protocol):
     """Protocol for event sinks that can write transaction events.
-    
+
     Any class implementing a `write(event: dict[str, Any]) -> None` method
     can be used as a sink for streaming events.
     """
-    
+
     def write(self, event: dict[str, Any]) -> None:
         """Write an event to the sink.
-        
+
         Args:
             event: Dictionary representation of a TransactionEvent
         """
@@ -26,17 +27,17 @@ class Sink(Protocol):
 
 class StdoutSink:
     """Sink that writes events as JSON to stdout."""
-    
+
     def __repr__(self) -> str:
         """Return string representation."""
         return "StdoutSink()"
-    
+
     def write(self, event: dict[str, Any]) -> None:
         """Write event as JSON line to stdout.
-        
+
         Args:
             event: Dictionary representation of a TransactionEvent
-            
+
         Raises:
             ValueError: If event cannot be serialized to JSON
         """
@@ -48,10 +49,10 @@ class StdoutSink:
 
 class KafkaSink:
     """Sink that writes events to a Kafka topic.
-    
+
     Requires the 'confluent-kafka' package to be installed.
     """
-    
+
     def __init__(
         self,
         bootstrap: str | None = None,
@@ -62,7 +63,7 @@ class KafkaSink:
         config: KafkaConfig | None = None,
     ):
         """Initialize Kafka sink.
-        
+
         Args:
             bootstrap: Kafka broker address (e.g., 'localhost:9092' or 'redpanda:9092').
                       Ignored if config is provided.
@@ -72,7 +73,7 @@ class KafkaSink:
             linger_ms: Milliseconds to wait before sending a batch. Ignored if config is provided.
             batch_size: Batch size in bytes. Ignored if config is provided.
             config: KafkaConfig object. If provided, overrides individual parameters.
-        
+
         Raises:
             ValueError: If required parameters are missing or invalid
         """
@@ -87,7 +88,7 @@ class KafkaSink:
                 linger_ms=linger_ms,
                 batch_size=batch_size,
             )
-        
+
         try:
             from confluent_kafka import Producer
         except ImportError:
@@ -95,10 +96,10 @@ class KafkaSink:
                 "confluent-kafka package is required for KafkaSink. "
                 "Install with: pip install confluent-kafka"
             )
-        
+
         self.topic = config.topic
         self.acks = self._normalize_acks(config.acks)
-        
+
         producer_config = {
             "bootstrap.servers": config.bootstrap,
             "client.id": "emitter",
@@ -106,19 +107,19 @@ class KafkaSink:
             "linger.ms": config.linger_ms,
             "batch.size": config.batch_size,
         }
-        
+
         self.producer = Producer(producer_config)
-    
+
     @staticmethod
     def _normalize_acks(acks_input: str | KafkaAcks | None) -> str:
         """Normalize acks parameter to string value.
-        
+
         Args:
             acks_input: acks value as string, KafkaAcks enum, or None
-            
+
         Returns:
             Normalized acks string value
-            
+
         Raises:
             ValueError: If string value is not valid
             TypeError: If type is not str, KafkaAcks, or None
@@ -139,7 +140,7 @@ class KafkaSink:
             raise TypeError(
                 f"acks must be str, KafkaAcks, or None, got {type(acks_input).__name__}"
             )
-    
+
     def __repr__(self) -> str:
         """Return string representation."""
         # Show enum name if value matches an enum value, otherwise show the value
@@ -149,19 +150,22 @@ class KafkaSink:
         except ValueError:
             acks_repr = repr(self.acks)
         return f"KafkaSink(topic={self.topic!r}, acks={acks_repr})"
-    
+
     def _delivery_callback(self, err: Any, msg: Any) -> None:
         """Callback for message delivery confirmation."""
         if err:
             print(f"Delivery failed: {err}", file=sys.stderr)
-    
+
     def flush(self) -> None:
         """Flush any pending messages to Kafka."""
         if self.producer:
             remaining = self.producer.flush(timeout=10.0)
             if remaining > 0:
-                print(f"Warning: {remaining} message(s) remain undelivered after flush", file=sys.stderr)
-    
+                print(
+                    f"Warning: {remaining} message(s) remain undelivered after flush",
+                    file=sys.stderr,
+                )
+
     def close(self) -> None:
         """Close the Kafka producer connection."""
         if self.producer:
@@ -172,13 +176,13 @@ class KafkaSink:
                 print(f"Warning: Error during final flush: {e}", file=sys.stderr)
             # confluent-kafka Producer doesn't need explicit close, but we'll clear references
             self.producer = None
-    
+
     def write(self, event: dict[str, Any]) -> None:
         """Write event to Kafka topic.
-        
+
         Args:
             event: Dictionary representation of a TransactionEvent
-            
+
         Raises:
             ValueError: If event cannot be serialized to JSON
             RuntimeError: If message production fails
@@ -188,9 +192,7 @@ class KafkaSink:
         try:
             value = json.dumps(event, ensure_ascii=False).encode("utf-8")
             self.producer.produce(
-                self.topic,
-                value,
-                callback=self._delivery_callback if self.acks != '0' else None
+                self.topic, value, callback=self._delivery_callback if self.acks != "0" else None
             )
             # Poll to trigger delivery callbacks (non-blocking)
             self.producer.poll(0)
@@ -198,13 +200,12 @@ class KafkaSink:
             raise ValueError(f"Failed to serialize event to JSON: {e}") from e
         except Exception as e:
             raise RuntimeError(f"Failed to produce message to Kafka: {e}") from e
-    
+
     def __enter__(self):
         """Context manager entry."""
         return self
-    
+
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Context manager exit - ensures close is called."""
         self.close()
         return False
-

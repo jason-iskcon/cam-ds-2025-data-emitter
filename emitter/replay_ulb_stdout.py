@@ -3,7 +3,12 @@ from typing import Any
 
 import pandas as pd
 
-from emitter._streaming import DEFAULT_BURST_DURATION, DEFAULT_BURST_MULTIPLIER, add_streaming_args, stream_events
+from emitter._streaming import (
+    DEFAULT_BURST_DURATION,
+    DEFAULT_BURST_MULTIPLIER,
+    add_streaming_args,
+    stream_events,
+)
 from emitter.common import add_kafka_args, create_sink
 from emitter.config import BurstConfig
 from emitter.contracts import TransactionEvent
@@ -24,29 +29,29 @@ def _get_column_value(row: pd.Series, primary: str, fallback: str = "", default=
 
 def _convert_to_json_safe(val: Any) -> Any:
     """Convert pandas/numpy value to JSON-serializable Python type.
-    
+
     Args:
         val: Value from pandas Series (may be numpy type, NaN, etc.)
-        
+
     Returns:
         Native Python type (None for NaN, converted numpy scalars)
     """
-    # Check pd.isna() BEFORE hasattr('item') because numpy NaN has .item() 
+    # Check pd.isna() BEFORE hasattr('item') because numpy NaN has .item()
     # but calling .item() on NaN returns Python nan (not None), breaking JSON
     if pd.isna(val):
         return None
-    elif hasattr(val, 'item'):  # numpy scalar
+    elif hasattr(val, "item"):  # numpy scalar
         return val.item()
     return val
 
 
 def _extract_features(row: pd.Series, exclude_cols: set[str]) -> dict[str, Any]:
     """Extract feature columns from pandas row, excluding specified columns.
-    
+
     Args:
         row: Pandas Series representing a data row
         exclude_cols: Set of column names to exclude from features
-        
+
     Returns:
         Dictionary of feature name to value (JSON-serializable)
     """
@@ -59,38 +64,40 @@ def _extract_features(row: pd.Series, exclude_cols: set[str]) -> dict[str, Any]:
 
 class ULBEventGenerator:
     """Generator for ULB credit card dataset events."""
-    
+
     def __init__(self, csv_path: str):
         self.csv_path = csv_path
         self.df: pd.DataFrame | None = None
         self._load_data()
-    
+
     def _load_data(self) -> None:
         """Load CSV data."""
         self.df = pd.read_csv(self.csv_path)
         if self.df.empty:
             raise ValueError(f"CSV file {self.csv_path} is empty")
-    
+
     def __call__(self, event_num: int, base_ts: int) -> TransactionEvent:
         """Generate event from CSV row at position event_num % len(df).
-        
+
         Includes all columns from the dataset in the features dict for ML compatibility.
         """
         if self.df is None or len(self.df) == 0:
             raise ValueError("No data available")
-        
+
         row_idx = event_num % len(self.df)
         row = self.df.iloc[row_idx]
-        
-        customer_id = _get_column_value(row, "CustomerID", "") or f"c{event_num % CUSTOMER_ID_MODULO}"
+
+        customer_id = (
+            _get_column_value(row, "CustomerID", "") or f"c{event_num % CUSTOMER_ID_MODULO}"
+        )
         amount = float(_get_column_value(row, "Amount", "amount", 0.0))
         label = int(_get_column_value(row, "Class", "label", 0))
-        
+
         # Include all columns from the dataset in features for ML compatibility
         # This preserves V1-V28 PCA features, Time, and any other columns needed for ML models
         exclude_cols = {"CustomerID", "Amount", "amount", "Class", "label"}
         features = _extract_features(row, exclude_cols)
-        
+
         return TransactionEvent(
             tx_id=f"ulb_{event_num}",
             customer_id=customer_id,
@@ -114,7 +121,7 @@ def replay(
     burst_config: BurstConfig | None = None,
 ):
     """Replay ULB credit card dataset events to a sink at specified rate.
-    
+
     Args:
         csv_path: Path to CSV file to replay
         rate: Events per second
@@ -151,10 +158,10 @@ if __name__ == "__main__":
     parser.add_argument("--loop", action="store_true", help="Loop replay indefinitely")
     add_streaming_args(parser)
     add_kafka_args(parser)
-    
+
     args = parser.parse_args()
     sink = create_sink(args)
-    
+
     replay(
         args.path,
         rate=args.rate,

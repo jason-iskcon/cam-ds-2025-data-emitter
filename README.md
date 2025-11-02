@@ -14,6 +14,9 @@ python -m venv .venv && source .venv/bin/activate
 
 pip install -r requirements.txt
 
+# Install pre-commit hooks (optional but recommended)
+pre-commit install
+
 # Synthetic 10 events @ 5 eps
 make emit
 

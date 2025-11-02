@@ -69,3 +69,7 @@ setup: up
 
 check-running:
 	@docker compose ps | grep -q "redpanda.*Up" || (echo "Error: Redpanda is not running. Run 'make up' first." && exit 1)
+
+# Development Helpers
+install-hooks:
+	pre-commit install
