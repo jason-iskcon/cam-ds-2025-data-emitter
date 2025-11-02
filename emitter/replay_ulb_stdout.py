@@ -40,6 +40,23 @@ def _convert_to_json_safe(val: Any) -> Any:
     return val
 
 
+def _extract_features(row: pd.Series, exclude_cols: set[str]) -> dict[str, Any]:
+    """Extract feature columns from pandas row, excluding specified columns.
+    
+    Args:
+        row: Pandas Series representing a data row
+        exclude_cols: Set of column names to exclude from features
+        
+    Returns:
+        Dictionary of feature name to value (JSON-serializable)
+    """
+    features = {}
+    for col in row.index:
+        if col not in exclude_cols:
+            features[col] = _convert_to_json_safe(row[col])
+    return features
+
+
 class ULBEventGenerator:
     """Generator for ULB credit card dataset events."""
     
@@ -71,11 +88,8 @@ class ULBEventGenerator:
         
         # Include all columns from the dataset in features for ML compatibility
         # This preserves V1-V28 PCA features, Time, and any other columns needed for ML models
-        features = {}
         exclude_cols = {"CustomerID", "Amount", "amount", "Class", "label"}
-        for col in row.index:
-            if col not in exclude_cols:
-                features[col] = _convert_to_json_safe(row[col])
+        features = _extract_features(row, exclude_cols)
         
         return TransactionEvent(
             tx_id=f"ulb_{event_num}",
