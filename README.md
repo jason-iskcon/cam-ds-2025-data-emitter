@@ -275,6 +275,7 @@ docker exec cam-ds-2025-data-emitter-redpanda-1 rpk topic describe transactions 
 ```
 
 **Monitoring:**
+- Redpanda Console: `http://localhost:8080` - Modern web UI for exploring topics, messages, consumers, and cluster health (included in docker-compose)
 - Redpanda admin console: `http://localhost:9644` - Web UI for monitoring topics, messages, and broker metrics
 - Port 19092: External Kafka-compatible API endpoint (from host)
 - Port 9092: Internal Kafka API endpoint (from containers)

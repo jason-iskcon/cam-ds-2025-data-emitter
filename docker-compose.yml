@@ -17,6 +17,17 @@ services:
     networks:
       - redpanda-net
 
+  console:
+    image: docker.redpanda.com/redpandadata/console:latest
+    environment:
+      KAFKA_BROKERS: "redpanda:9092"
+    ports:
+      - "8080:8080"
+    networks:
+      - redpanda-net
+    depends_on:
+      - redpanda
+
 networks:
   redpanda-net:
     driver: bridge
