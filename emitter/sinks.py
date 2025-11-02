@@ -3,6 +3,8 @@ import json
 import sys
 from typing import Any, Protocol, runtime_checkable
 
+from emitter.enums import KafkaAcks
+
 
 @runtime_checkable
 class Sink(Protocol):
@@ -53,7 +55,7 @@ class KafkaSink:
         self,
         bootstrap: str,
         topic: str,
-        acks: str | None = "1",
+        acks: str | KafkaAcks | None = "1",
         linger_ms: int = 5,
         batch_size: int = 16384,
     ):
@@ -62,7 +64,8 @@ class KafkaSink:
         Args:
             bootstrap: Kafka broker address (e.g., 'localhost:9092' or 'redpanda:9092')
             topic: Kafka topic name to write events to
-            acks: Number of acknowledgments required ('0', '1', 'all', or None)
+            acks: Number of acknowledgments required. Can be '0', '1', 'all' (string),
+                  KafkaAcks enum, or None (defaults to '1')
             linger_ms: Milliseconds to wait before sending a batch
             batch_size: Batch size in bytes
         """
@@ -75,10 +78,26 @@ class KafkaSink:
             )
         
         self.topic = topic
-        valid_acks = ('0', '1', 'all')
-        if acks is not None and acks not in valid_acks:
-            raise ValueError(f"acks must be one of {valid_acks}, got {acks!r}")
-        self.acks = acks or "1"
+        
+        # Normalize acks: convert enum to string, or validate string input
+        if acks is None:
+            acks_value = "1"
+        elif isinstance(acks, KafkaAcks):
+            acks_value = acks.value
+        elif isinstance(acks, str):
+            # Validate string value
+            valid_strings = {e.value for e in KafkaAcks}
+            if acks not in valid_strings:
+                raise ValueError(
+                    f"acks must be one of {valid_strings} or a KafkaAcks enum, got {acks!r}"
+                )
+            acks_value = acks
+        else:
+            raise TypeError(
+                f"acks must be str, KafkaAcks, or None, got {type(acks).__name__}"
+            )
+        
+        self.acks = acks_value
         
         config = {
             "bootstrap.servers": bootstrap,
@@ -92,7 +111,13 @@ class KafkaSink:
     
     def __repr__(self) -> str:
         """Return string representation."""
-        return f"KafkaSink(topic={self.topic!r}, acks={self.acks!r})"
+        # Show enum name if value matches an enum value, otherwise show the value
+        try:
+            acks_enum = KafkaAcks(self.acks)
+            acks_repr = f"KafkaAcks.{acks_enum.name}"
+        except ValueError:
+            acks_repr = repr(self.acks)
+        return f"KafkaSink(topic={self.topic!r}, acks={acks_repr})"
     
     def _delivery_callback(self, err: Any, msg: Any) -> None:
         """Callback for message delivery confirmation."""

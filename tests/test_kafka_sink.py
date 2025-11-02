@@ -3,6 +3,7 @@ import sys
 import pytest
 from unittest.mock import MagicMock, patch
 
+from emitter.enums import KafkaAcks
 from emitter.sinks import KafkaSink
 
 
@@ -61,6 +62,20 @@ class TestKafkaSink:
                 assert sink.acks == acks
                 call_kwargs = mock_producer_class.call_args[0][0]
                 assert call_kwargs["acks"] == acks
+    
+    def test_init_with_enum(self):
+        """Test KafkaSink initialization with KafkaAcks enum."""
+        for acks_enum in KafkaAcks:
+            patcher, mock_producer_class, mock_producer = self._mock_confluent_kafka()
+            with patcher:
+                sink = KafkaSink(
+                    bootstrap="localhost:9092",
+                    topic="transactions",
+                    acks=acks_enum
+                )
+                assert sink.acks == acks_enum.value
+                call_kwargs = mock_producer_class.call_args[0][0]
+                assert call_kwargs["acks"] == acks_enum.value
     
     def test_init_invalid_acks_raises_error(self):
         """Test KafkaSink initialization with invalid acks raises ValueError."""
